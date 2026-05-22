@@ -114,6 +114,7 @@ On Windows, assume PowerShell 5.1 semantics unless proven otherwise.
 
 * Never claim completion without running relevant checks in touched repo(s).
 * Use repo-appropriate checks. For this repo, validate Markdown/skill changes with targeted file inspection and `git diff --check`.
+* When files are staged, also run `git diff --cached --check` so staged whitespace errors are not missed.
 * Distinguish unrelated pre-existing warnings/errors from regressions caused by the change.
 * If required GitHub checks stay pending or missing after a push, do not wait indefinitely. Inspect `gh pr view <number> --json mergeStateStatus,reviewDecision,statusCheckRollup`, check required branch-protection contexts, and confirm workflow `paths` filters include the touched files.
 * If a required workflow did not trigger, update the workflow trigger paths or run a deliberate no-op workflow-touch commit so the required checks can start; then re-poll checks with a bounded wait.
