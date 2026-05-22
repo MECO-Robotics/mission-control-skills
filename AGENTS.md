@@ -33,7 +33,7 @@
 
 ### Environment Preflight
 
-Run once per task:
+Run once per task. On Windows/PowerShell, use:
 
 ```powershell
 where.exe node
@@ -44,9 +44,20 @@ rg --version
 git rev-parse --show-toplevel
 ```
 
+On Linux/macOS/POSIX shells, use:
+
+```bash
+command -v node
+node -v
+command -v npm
+command -v rg
+rg --version
+git rev-parse --show-toplevel
+```
+
 If `git rev-parse --show-toplevel` fails, note "not a git repo" and continue.
 
-Assume PowerShell 5.1 semantics unless proven otherwise.
+On Windows, assume PowerShell 5.1 semantics unless proven otherwise.
 
 ### Session Hygiene And Anti-Slowdown Rules
 
@@ -63,7 +74,7 @@ Assume PowerShell 5.1 semantics unless proven otherwise.
 ### Windows Command Rules
 
 * Do not use `&&` in commands; use separate commands or `;`.
-* Prefer `npm.cmd` over `npm` for reliability when Node tooling is present.
+* On Windows, prefer `npm.cmd` over `npm` for reliability when Node tooling is present. In POSIX shells, use `npm`.
 * If a command fails due to permissions/policy, try one practical fallback immediately and continue.
 
 ### rg Reliability Rules
