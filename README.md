@@ -13,6 +13,7 @@ skills/
   api-review/
   frc-domain/
   github-project-management/
+  github-pr-publish-review-loop/
   meco-writing-style/
 ```
 
