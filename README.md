@@ -11,6 +11,7 @@ skills/
   app-architecture/
   ui-review/
   api-review/
+  documentation-check/
   frc-domain/
   github-project-management/
   github-pr-publish-review-loop/
