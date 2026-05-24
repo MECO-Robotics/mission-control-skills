@@ -2,7 +2,7 @@
 
 Shared Codex skills for the Mission Control application repos.
 
-The app repos keep `skills/` as ordinary committed files. This repo is the shared source of truth, and each app repo syncs a copy with `scripts/sync-skills.sh` or `scripts/sync-skills.ps1`.
+The app repos import `skills/` as local ignored files. This repo is the shared source of truth and the only place the skill files themselves should be versioned.
 
 ## Layout
 
@@ -32,10 +32,8 @@ From an app repo root:
 
 ```bash
 bash scripts/sync-skills.sh
-git diff -- skills
-git add skills
-git commit -m "Sync shared skills"
-git push
 ```
 
-Do not use Git submodules for these skills. The app repos should contain normal committed copies of `skills/`.
+Do not `git add skills` in app repos. The app repos track the import scripts and ignore the imported local `skills/` directory.
+
+Do not use Git submodules for these skills.
