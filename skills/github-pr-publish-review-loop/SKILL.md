@@ -13,6 +13,7 @@ Treat PR publishing as an end-to-end workflow: scoped branch, related issue, pro
 - Read the repo's active policy before deciding the PR shape. Start with `AGENTS.md`; if missing, inspect `.github`, branch protection/ruleset notes, and existing open PR patterns.
 - Use the user's newest wording as scope. Stage only in-scope files and keep unrelated dirty work untouched.
 - Prefer a feature or fix branch off the requested base branch. Default Mission Control PR target is `development`; do not target `main` unless the user explicitly requests a production promotion/hotfix and repo policy allows that shape.
+- Treat `MECO-Robotics/mission-control-skills` as the shared-skill source exception: when explicitly reconciling or promoting skills repo `development` to `main`, a dedicated `skills/*` repair/promotion branch may target `main`.
 - Run relevant validation before publishing or after each fix pass. Use targeted checks first, then broader repo checks when the touched surface is shared.
 - If connector or `gh` commands fail, try one practical fallback and continue. Do not repeat the same broken path.
 
@@ -22,6 +23,7 @@ Do not create, retarget, update, or request review on a PR until this gate is sa
 
 - Confirm the intended base branch from the user request and repo policy. For normal Mission Control work, use `development`.
 - Confirm the head branch name is allowed for that base. For PRs into `development`, use only `feature/*`, `fix/*`, or `hotfix/*`.
+- For `main`, allow only `development` promotions or `hotfix/*` unless the repo is `MECO-Robotics/mission-control-skills`; in that repo, an explicitly requested skills reconciliation/promotion PR may use a `skills/*` head branch into `main`.
 - Confirm the worktree started from the intended base branch, normally `origin/development` for active work. Do not patch a `development -> main` promotion branch; create a separate fix PR into `development`.
 - Confirm the exact base at PR creation/update time. Use explicit flags such as `--base development --head <branch>`; never rely on GitHub's default base.
 - Immediately verify the live PR after creation or retargeting:
@@ -96,6 +98,7 @@ Approval-like reactions are not enough. A connector `eyes` reaction, zero flat c
 | Hardcoding ProjectV2 field IDs | Query fields/options at runtime |
 | Letting GitHub choose the PR base | Pass an explicit `--base`, then verify `baseRefName` |
 | Opening normal feature/fix work against `main` | Target `development`; reserve `main` for development promotions or allowed hotfixes |
+| Rejecting a `mission-control-skills` `skills/*` PR into `main` during explicit skills divergence repair | Apply the shared-skills exception, document it in the PR body, and verify the live base/head |
 | Fixing review comments on a promotion PR | Open a separate fix PR into `development`, then let the promotion PR update from `development` |
 | Treating resolved threads as final approval | Also inspect latest connector review/comment text |
 | Stopping after one fix push | Trigger a new connector review and repeat |
