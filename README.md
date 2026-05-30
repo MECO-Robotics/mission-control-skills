@@ -16,6 +16,7 @@ skills/
   github-project-management/
   github-pr-publish-review-loop/
   meco-writing-style/
+  worktree-default/
 ```
 
 ## Update Shared Skills

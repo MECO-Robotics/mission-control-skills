@@ -23,6 +23,8 @@
 
 ### Worktree-Only Workflow
 
+* Unless the user explicitly asks not to use worktrees, assume all implementation, maintenance, documentation, validation, and file-editing work must happen in a worktree.
+* Do not ask for worktree consent when a git repo is available; create or enter the appropriate worktree and continue.
 * Never implement, edit files, stage, commit, or run long-lived dev servers from the base repo checkout unless the user explicitly says to work there.
 * Use base repo checkouts only for read-only inspection, fetches, and creating worktrees.
 * Before touching files, create or enter a dedicated temporary worktree rooted on the intended PR target branch: use `origin/development` for normal `feature/*`, `fix/*`, and hotfixes targeting `development`; use `origin/main` for `hotfix/*` branches that will PR directly into `main`.
