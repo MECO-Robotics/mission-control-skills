@@ -1,0 +1,103 @@
+#!/usr/bin/env node
+
+const fs = require("node:fs");
+const path = require("node:path");
+
+const ROOT = process.cwd();
+const FILES = [
+  {
+    path: ".mission-control/repo-registry.json",
+    content:
+      `{\n  "repos": [\n    {\n      "name": "frontend",\n      "github": "",\n      "role": "Product UI and web frontend delivery"\n    },\n    {\n      "name": "backend",\n      "github": "",\n      "role": "Contracts, APIs, and backend services"\n    },\n    {\n      "name": "agents",\n      "github": "",\n      "role": "Codex process and coordination artifacts"\n    }\n  ]\n}\n`,
+  },
+  {
+    path: ".mission-control/global-issues.json",
+    content: '{\n  "tasks": []\n}\n',
+  },
+  {
+    path: ".mission-control/dependency-map.json",
+    content: '{\n  "dependencies": []\n}\n',
+  },
+  {
+    path: ".mission-control/cross-repo-decisions.md",
+    content:
+      "# Cross-Repository Decision Log\n\nThis is an append-only log. Never rewrite or reorder previous entries.\n",
+  },
+  {
+    path: ".mission-control/architecture-wiki.md",
+    content:
+      "# Architecture Reference\n\nThis file is the source of record for generated architecture documentation.\n",
+  },
+  {
+    path: ".mission-control/roadmap.md",
+    content:
+      "# Mission Control Roadmap\n\nPopulate near-term, mid-term, and long-term roadmap milestones here.\n",
+  },
+  {
+    path: "prompts/architect.md",
+    content:
+      "# Architect Prompt Template\n\nDefine scoped, cross-repo-safe implementation plans.\n",
+  },
+  {
+    path: "prompts/coder.md",
+    content: "# Coder Prompt Template\n\nImplement assigned tasks and keep task state synchronized.\n",
+  },
+  {
+    path: "prompts/reviewer.md",
+    content: "# Reviewer Prompt Template\n\nReview for correctness, boundaries, and dependency safety.\n",
+  },
+  {
+    path: "prompts/maintainer.md",
+    content: "# Maintainer Prompt Template\n\nCoordinate merge readiness and release-safe task completion.\n",
+  },
+  {
+    path: "prompts/cross-repo-change.md",
+    content:
+      "# Cross-Repo Change Prompt Template\n\nTrack repo ownership, dependencies, and blockers before merge.\n",
+  },
+  {
+    path: "skills/issue-planning.md",
+    content:
+      "# Skill: Issue Planning\n\nBreak work into scoped tasks with cross-repo dependency links.\n",
+  },
+  {
+    path: "skills/implementation.md",
+    content: "# Skill: Implementation\n\nExecute assigned work without cross-repo boundary violations.\n",
+  },
+  {
+    path: "skills/review-loop.md",
+    content: "# Skill: Review Loop\n\nKeep status and dependencies current through review closure.\n",
+  },
+  {
+    path: "skills/wiki-refresh.md",
+    content:
+      "# Skill: Wiki Refresh\n\nGenerate shared mission-control documentation from source-of-truth files.\n",
+  },
+  {
+    path: "skills/release-coordination.md",
+    content: "# Skill: Release Coordination\n\nCoordinate multi-repo release readiness and rollback planning.\n",
+  },
+];
+
+function ensureDir(filePath) {
+  const dir = path.dirname(path.join(ROOT, filePath));
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function writeIfMissing(filePath, content) {
+  const absolute = path.join(ROOT, filePath);
+  if (fs.existsSync(absolute)) {
+    console.log(`skip existing: ${filePath}`);
+    return;
+  }
+
+  ensureDir(filePath);
+  fs.writeFileSync(absolute, content, "utf8");
+  console.log(`created: ${filePath}`);
+}
+
+for (const entry of FILES) {
+  writeIfMissing(entry.path, entry.content);
+}
+
+console.log("init complete");

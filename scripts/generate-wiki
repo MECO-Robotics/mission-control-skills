@@ -1,0 +1,51 @@
+#!/usr/bin/env node
+
+const fs = require("node:fs");
+const path = require("node:path");
+
+const ROOT = process.cwd();
+const MC_DIR = path.join(ROOT, ".mission-control");
+const OUT_PATH = path.join(MC_DIR, "generated-wiki.md");
+
+function readText(filePath, fallback = "") {
+  return fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : fallback;
+}
+
+const sections = {
+  registry: readText(path.join(MC_DIR, "repo-registry.json"), "{}"),
+  issues: readText(path.join(MC_DIR, "global-issues.json"), '{"tasks":[]}'),
+  dependencies: readText(path.join(MC_DIR, "dependency-map.json"), '{"dependencies":[]}'),
+  architecture: readText(path.join(MC_DIR, "architecture-wiki.md"), "# Architecture unavailable"),
+  decisions: readText(path.join(MC_DIR, "cross-repo-decisions.md"), "# No decisions logged"),
+  roadmap: readText(path.join(MC_DIR, "roadmap.md"), "# Roadmap unavailable"),
+};
+
+const output = [
+  "# Mission Control Generated Wiki",
+  `Generated: ${new Date().toISOString()}`,
+  "",
+  "## Repository Registry",
+  "```json",
+  sections.registry.trim(),
+  "```",
+  "",
+  "## Global Issues",
+  "```json",
+  sections.issues.trim(),
+  "```",
+  "",
+  "## Dependency Map",
+  "```json",
+  sections.dependencies.trim(),
+  "```",
+  "",
+  sections.architecture.trim(),
+  "",
+  sections.roadmap.trim(),
+  "",
+  sections.decisions.trim(),
+  "",
+].join("\n");
+
+fs.writeFileSync(OUT_PATH, output, "utf8");
+console.log(`generated ${path.relative(ROOT, OUT_PATH)}`);
