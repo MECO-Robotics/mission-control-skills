@@ -1,0 +1,14 @@
+{
+  "include_patterns": {{INCLUDE_PATTERNS}},
+  "exclude_patterns": {{EXCLUDE_PATTERNS}},
+  "ignore": {
+    "use_gitignore": true,
+    "custom_patterns": {{IGNORE_PATTERNS}}
+  },
+  "output": {
+    "file_path": "{{OUTPUT_FILE}}",
+    "format": "xml",
+    "append": false
+  }
+}
+
