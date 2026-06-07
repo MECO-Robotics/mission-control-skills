@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+
+const {
+  parseArgs,
+  readJSON,
+  validateGraph,
+  loadRepoRegistry,
+} = require("./_nexus-lib");
+
+const args = parseArgs(process.argv.slice(2));
+const input = args.positional[0] || args.flags.input;
+
+if (!input) {
+  console.error("Usage: node validate-nexus-data <graph.json> [--input graph.json]");
+  process.exit(1);
+}
+
+let graph;
+try {
+  graph = readJSON(input, "nexus graph");
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
+
+const { names: knownRepos } = loadRepoRegistry();
+const result = validateGraph(graph, { knownRepos, checkUnknownRepos: true });
+
+for (const warning of result.warnings) {
+  console.error(`warning: ${warning}`);
+}
+if (result.errors.length > 0) {
+  for (const error of result.errors) {
+    console.error(`error: ${error}`);
+  }
+  console.error(`validation failed with ${result.errors.length} error(s)`);
+  process.exit(1);
+}
+
+console.log("validation passed");

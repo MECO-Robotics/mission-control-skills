@@ -61,6 +61,19 @@ The existing `skills/*` folder can continue to host shared Codex skill content.
 This mission-control scaffold adds coordination documents alongside it without changing existing
 skill packages.
 
+## Optional Git Nexus integration
+
+If you work with Git Nexus graph data, use the optional adapter in:
+
+`integrations/git-nexus/`
+
+The adapter is intentionally opt-in and does not change the baseline Mission Control contract.
+
+```bash
+node integrations/git-nexus/scripts/validate-nexus-data --input integrations/git-nexus/fixtures/sample-nexus-graph.json
+node integrations/git-nexus/scripts/export-nexus-data --output /tmp/nexus-export.json
+```
+
 ## Product repository minimum AGENTS entry
 
 Every product repository participating in Mission Control should include:
