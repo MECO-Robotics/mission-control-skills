@@ -1,0 +1,26 @@
+{
+  "output_dir": "wiki",
+  "required_pages": [
+    "index.md",
+    "architecture.md",
+    "repositories.md",
+    "dependency-map.md",
+    "task-index.md",
+    "decision-log.md",
+    "agent-workflow.md",
+    "review-workflow.md",
+    "release-workflow.md"
+  ],
+  "required_headings": {
+    "index.md": ["# Mission Control Wiki", "## Required Pages", "## State Snapshot"],
+    "architecture.md": ["# Architecture", "## Source Architecture", "## Repository Responsibilities", "## Dependency Summary", "## Git Nexus Relationship Context"],
+    "repositories.md": ["# Repositories", "## Known Repositories"],
+    "dependency-map.md": ["# Dependency Map", "## Repository Dependencies"],
+    "task-index.md": ["# Task Index", "## Tasks by Status"],
+    "decision-log.md": ["# Decision Log", "## Source Decisions"],
+    "agent-workflow.md": ["# Agent Workflow", "## Roles", "## Handoff Flow"],
+    "review-workflow.md": ["# Review Workflow", "## Review Objectives", "## Review Steps"],
+    "release-workflow.md": ["# Release Workflow", "## Readiness", "## Completion Checklist"]
+  },
+  "preserve_manual_sections": true
+}

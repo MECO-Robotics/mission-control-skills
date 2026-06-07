@@ -74,6 +74,28 @@ node integrations/git-nexus/scripts/validate-nexus-data --input integrations/git
 node integrations/git-nexus/scripts/export-nexus-data --output /tmp/nexus-export.json
 ```
 
+## Optional Git Wiki integration
+
+If you want human-readable docs generated from Mission Control state, use the optional adapter in:
+
+`integrations/git-wiki/`
+
+It renders markdown under `wiki/` and keeps manual sections with:
+
+`<!-- MC:MANUAL-START -->`
+`<!-- MC:MANUAL-END -->`
+
+```bash
+node integrations/git-wiki/scripts/generate-wiki-pages
+node integrations/git-wiki/scripts/validate-wiki-pages
+node integrations/git-wiki/scripts/refresh-architecture-page
+node integrations/git-wiki/scripts/refresh-decision-log-page
+node integrations/git-wiki/scripts/refresh-dependency-page
+node integrations/git-wiki/scripts/refresh-task-index-page
+```
+
+This adapter is optional and does not add runtime dependencies to Mission Control.
+
 ## Product repository minimum AGENTS entry
 
 Every product repository participating in Mission Control should include:

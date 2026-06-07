@@ -1,0 +1,34 @@
+#!/usr/bin/env node
+
+const {
+  parseArgs,
+  loadConfig,
+  loadMissionState,
+  addManualPlaceholder,
+  preserveManualSections,
+  generateDependencyPage,
+  pageNameToPath,
+  writeText,
+  readExistingPage,
+} = require("./_wiki-lib");
+
+const args = parseArgs(process.argv.slice(2));
+if (args.flags.help) {
+  console.log("Usage: node refresh-dependency-page [--output-dir wiki]");
+  process.exit(0);
+}
+
+const config = loadConfig();
+if (args.flags["output-dir"]) {
+  config.output_dir = args.flags["output-dir"];
+}
+
+const state = loadMissionState();
+const pagePath = pageNameToPath(config, "dependency-map.md");
+const existing = readExistingPage(config, "dependency-map.md");
+const generated = generateDependencyPage(state);
+const withManual = addManualPlaceholder(generated);
+const output = preserveManualSections(existing, withManual);
+
+writeText(pagePath, output);
+console.log(`refreshed ${pagePath}`);

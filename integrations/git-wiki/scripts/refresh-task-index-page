@@ -1,0 +1,34 @@
+#!/usr/bin/env node
+
+const {
+  parseArgs,
+  loadConfig,
+  loadMissionState,
+  addManualPlaceholder,
+  preserveManualSections,
+  generateTaskIndexPage,
+  pageNameToPath,
+  writeText,
+  readExistingPage,
+} = require("./_wiki-lib");
+
+const args = parseArgs(process.argv.slice(2));
+if (args.flags.help) {
+  console.log("Usage: node refresh-task-index-page [--output-dir wiki]");
+  process.exit(0);
+}
+
+const config = loadConfig();
+if (args.flags["output-dir"]) {
+  config.output_dir = args.flags["output-dir"];
+}
+
+const state = loadMissionState();
+const pagePath = pageNameToPath(config, "task-index.md");
+const existing = readExistingPage(config, "task-index.md");
+const generated = generateTaskIndexPage(state);
+const withManual = addManualPlaceholder(generated);
+const output = preserveManualSections(existing, withManual);
+
+writeText(pagePath, output);
+console.log(`refreshed ${pagePath}`);
