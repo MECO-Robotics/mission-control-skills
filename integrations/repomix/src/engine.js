@@ -489,20 +489,45 @@ function buildTaskContext(options) {
     }
   }
   const repoPaths = collectRepoPaths(related, repositoryRoot, path.join(repositoryRoot, "repo-registry.json"));
-  const files = [];
-  for (const repo of repoPaths) {
-    const repoFiles = walkFiles(repo, profile);
-    for (const file of repoFiles) {
-      files.push({
-        ...file,
-        path: `${normalizeSegments(repositoryRoot, repo)}/${file.path}`,
+  const repoIntelligence = loadRepositoryIntelligenceModule();
+  let files = [];
+  let intelligenceContext = null;
+  if (repoIntelligence && typeof repoIntelligence.find_context_for_task === "function") {
+    try {
+      repoIntelligence.buildIndexes({ repositoryRoot });
+      intelligenceContext = repoIntelligence.find_context_for_task({
+        repositoryRoot,
+        taskId: seedId,
+        profile: profileName,
+        limit: options.limit || options.maxFiles || 80,
       });
+      files = collectTaskFilesFromContext(repositoryRoot, profile, intelligenceContext.files);
+    } catch {
+      files = [];
+    }
+  }
+  if (!files || files.length === 0) {
+    for (const repo of repoPaths) {
+      const repoFiles = walkFiles(repo, profile);
+      for (const file of repoFiles) {
+        files.push({
+          ...file,
+          path: `${normalizeSegments(repositoryRoot, repo)}/${file.path}`,
+        });
+      }
     }
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
+  files = files.filter((file, index, arr) => arr.findIndex((row) => row.path === file.path) === index);
+  if (options.limit && files.length > options.limit) {
+    files = files.slice(0, options.limit);
+  }
   const metadata = metadataEnvelope({
     profile: profileName,
-    repositories: repoPaths.map((repo) => normalizeSegments(repositoryRoot, repo)),
+    repositories: [...new Set([
+      ...repoPaths.map((repo) => normalizeSegments(repositoryRoot, repo)),
+      ...(intelligenceContext?.files || []).map((row) => row.repository || "."),
+    ])],
     tasks: related.map((task) => task.id),
     dependencies: relationships,
     files,
@@ -524,6 +549,24 @@ function buildTaskContext(options) {
   if (wiki && Array.isArray(wiki.decisions)) {
     for (const row of wiki.decisions) {
       depLines.push(`- ${row.id || "decision"}: ${row.title || JSON.stringify(row)}`);
+    }
+  }
+  if (intelligenceContext && Array.isArray(intelligenceContext.decisions) && intelligenceContext.decisions.length > 0) {
+    depLines.push("## Intelligence decisions");
+    for (const decision of intelligenceContext.decisions) {
+      depLines.push(`- ${decision}`);
+    }
+  }
+  if (intelligenceContext && Array.isArray(intelligenceContext.documentation) && intelligenceContext.documentation.length > 0) {
+    depLines.push("## Intelligence documentation");
+    for (const doc of intelligenceContext.documentation) {
+      depLines.push(`- ${doc.repository || "global"}: ${doc.path || JSON.stringify(doc)}`);
+    }
+  }
+  if (intelligenceContext && Array.isArray(intelligenceContext.relatedTasks) && intelligenceContext.relatedTasks.length > 0) {
+    depLines.push("## Intelligence related tasks");
+    for (const relatedTask of intelligenceContext.relatedTasks) {
+      depLines.push(`- ${relatedTask}`);
     }
   }
   writeIfNeeded(mdDeps, `${depLines.join("\n")}\n`);
@@ -725,6 +768,67 @@ function summarizeContext(options) {
   const out = `${lines.join("\n")}\n`;
   writeIfNeeded(summaryPath, out);
   return { summaryPath, report };
+}
+
+function loadRepositoryIntelligenceModule() {
+  const candidate = path.resolve(__dirname, "..", "..", "repository-intelligence", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function collectTaskFilesFromContext(repositoryRoot, profile, intelligenceRecords) {
+  const seen = new Set();
+  const out = [];
+  for (const row of intelligenceRecords || []) {
+    const recordRepo = row.repository || ".";
+    const fileRel = row.path || row.file;
+    if (!fileRel || typeof fileRel !== "string") {
+      continue;
+    }
+    const repositoryPath = path.resolve(repositoryRoot, recordRepo);
+    const normalizedRepo = recordRepo.replace(/\\/g, "/").replace(/^\.\//, "");
+    const candidate = fileRel.replace(/^\/+/, "").replace(/\\/g, "/");
+    const relInRepo = normalizedRepo && normalizedRepo !== "." && candidate.toLowerCase().startsWith(`${normalizedRepo.toLowerCase()}/`)
+      ? candidate.slice(normalizedRepo.length + 1)
+      : candidate;
+    const abs = path.resolve(repositoryPath, relInRepo);
+    const relFromRepo = path.relative(repositoryPath, abs);
+    if (relFromRepo.startsWith("..") || relFromRepo === "") {
+      continue;
+    }
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      continue;
+    }
+    const rel = path.relative(repositoryRoot, abs).split(path.sep).join("/");
+    if (!shouldIncludeFile(rel, profile)) {
+      continue;
+    }
+    const content = readTextSafe(abs);
+    if (content === null) {
+      continue;
+    }
+    const key = rel;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const isDoc = isDocPath(rel, profile.documentationSuffixes);
+    out.push({
+      path: rel,
+      abs,
+      size: fs.statSync(abs).size,
+      content,
+      kind: isDoc ? "doc" : "code",
+      tokens: estimateTokens(content),
+      sha1: sha1(content),
+      repository: recordRepo,
+    });
+  }
+  return out;
 }
 
 function generateRepomixConfigFile(options) {
