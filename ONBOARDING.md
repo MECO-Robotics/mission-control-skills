@@ -101,3 +101,26 @@ Mission Control now includes `integrations/code-search/` for symbol/references/c
 - Local fallback indexing extracts symbols and references from repository files.
 - Sourcebot is optional and only used when available; all calls degrade to local search.
 - Repository Intelligence benefits from exact symbol-first behavior via the code-search symbol feed.
+
+## Cross-repo workflow rule (for current rollout)
+
+This repository is the single shared source of truth for Mission Control adapter implementations and onboarding behavior used by:
+
+- `meco-mission-control-platform`
+- `meco-mission-control-mobile`
+- `meco-mission-control-web`
+
+When adapter behavior changes (e.g., retrieval, graph, analysis, evaluation, observability, semantic fallback), apply those changes in this repo first.
+
+Then sync downstream repos through their normal cross-repo import process (no direct integration rewrites in app repos).
+
+Current integrated adapter set in this rollout:
+
+- Repomix
+- Repository Intelligence
+- Graphify
+- Static Analysis
+- Evaluation
+- Observability
+- Code Search (Sourcebot Foundation)
+- Semantic Retrieval (Qdrant Foundation)
