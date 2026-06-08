@@ -1,0 +1,5 @@
+﻿#!/usr/bin/env node
+const cli = require("../src/cli");
+const result = cli.commandRecordRetrievalRun(process.argv.slice(2));
+console.log(`trace_id=${result.trace_id}`);
+console.log(`path=${result.tracePath}`);

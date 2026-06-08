@@ -46,3 +46,26 @@ Graph outputs are used by:
 - repository-intelligence hybrid retrieval,
 - Repomix task/PR context exports,
 - graph summaries for cross-repo planning.
+
+## Observability adapter
+
+Mission Control now includes `integrations/observability/` as a local-first event log for agent workflows.
+
+- Records trace artifacts under `observability/traces/` and `observability/trace-index.json`.
+- Optional Langfuse provider exports the same trace set to `observability/langfuse-export.json` for opt-in forwarding.
+- Records:
+  - agent runs,
+  - context-package generation,
+  - retrieval sessions,
+  - review loops,
+  - evaluation runs.
+- Integrates with:
+  - Repository-Intelligence (retrieval neighbors),
+  - Graphify (neighborhood context),
+  - Static Analysis (findings deltas in review loops),
+  - Evaluation payloads (prompt/profile linkage),
+  - task/task/dep metadata from `global-issues.json` and `dependency-map.json`.
+
+When present, `observability/prompts/registry.json` is used to resolve prompt IDs and versions for trace metadata.
+
+Secrets are redacted in stored metadata; no prompt/runtime credentials should be intentionally passed into trace payload fields.

@@ -1,0 +1,5 @@
+﻿#!/usr/bin/env node
+const cli = require("../src/cli");
+const result = cli.commandValidateTraceState(process.argv.slice(2));
+console.log(`valid=${result.valid}`);
+console.log(`failures=${result.failures.length}`);
