@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+const cli = require("../src/cli");
+const result = cli.commandGenerateReviewFindings(process.argv.slice(2));
+console.log(`output=${result.outputPath}`);
+console.log(`findings=${result.findingCount}`);

@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+const cli = require("../src/cli");
+const result = cli.commandParseAnalysisResults(process.argv.slice(2));
+console.log(`analyzer=${result.analyzer}`);
+console.log(`count=${result.findings.length}`);

@@ -1,0 +1,15 @@
+#!/usr/bin/env node
+const cli = require("../src/cli");
+
+const result = cli.commandValidateGraph(process.argv.slice(2));
+if (!result || result.valid !== true) {
+  if (result && Array.isArray(result.failures)) {
+    for (const row of result.failures) {
+      console.error(row);
+    }
+  }
+  process.exit(1);
+}
+console.log(`valid=${result.valid}`);
+console.log(`node_count=${result.node_count}`);
+console.log(`edge_count=${result.edge_count}`);

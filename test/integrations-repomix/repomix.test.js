@@ -8,6 +8,7 @@ const { createRequire } = require("node:module");
 
 const requireFromRepo = createRequire(__filename);
 const repomix = requireFromRepo("../../integrations/repomix/src/engine.js");
+const graphify = requireFromRepo("../../integrations/graphify/src/engine.js");
 
 function write(filePath, content) {
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -79,6 +80,37 @@ test("builds task context with related tasks and dependencies", () => {
   }
 });
 
+test("build-task-context can include graph context summaries", () => {
+  const root = tempDir();
+  try {
+    const repo = path.join(root, "repo");
+    mkdirSync(repo, { recursive: true });
+    write(path.join(repo, "src", "task.ts"), "export const task = 1;\n");
+    write(path.join(repo, "global-issues.json"), JSON.stringify({
+      tasks: [{ id: "MC-500", repository: "repo-a", files: ["src/task.ts"] }],
+    }));
+    write(path.join(repo, "dependency-map.json"), JSON.stringify({ dependencies: [{ from: "MC-500", to: "MC-501", type: "depends_on" }] }));
+    write(path.join(repo, "repo-registry.json"), JSON.stringify({ repositories: { "repo-a": { path: "." } } }));
+    graphify.buildProjectGraph({
+      repositoryRoot: repo,
+      outputDir: path.join(repo, "generated-graphs"),
+      profile: "coder",
+      preferExternal: false,
+    });
+    const out = repomix.buildTaskContext({
+      repositoryPath: repo,
+      taskId: "MC-500",
+      outputDir: path.join(repo, "generated-context"),
+      profile: "coder",
+    });
+    assert.equal(out.graphContextPath !== null, true);
+    const summary = fs.readFileSync(path.join(repo, "generated-context", "task-summary.md"), "utf8");
+    assert.equal(summary.includes("Graph context"), true);
+  } finally {
+    cleanupDir(root);
+  }
+});
+
 test("builds PR context with wiki-linked decisions", () => {
   const root = tempDir();
   try {
@@ -99,6 +131,47 @@ test("builds PR context with wiki-linked decisions", () => {
     assert.ok(out.xmlPath);
     const decisions = fs.readFileSync(path.join(repo, "generated-context", "related-decisions.md"), "utf8");
     assert.equal(decisions.includes("PR-DECISION-01"), true);
+  } finally {
+    cleanupDir(root);
+  }
+});
+
+test("build-pr-context includes graph neighborhoods for changed files", () => {
+  const root = tempDir();
+  try {
+    const repo = path.join(root, "repo");
+    mkdirSync(repo, { recursive: true });
+    write(path.join(repo, "src", "feature.ts"), "export const feature = 5;\n");
+    write(path.join(repo, "pr-data", "pr-77.json"), JSON.stringify({
+      number: 77,
+      changedFiles: ["src/feature.ts"],
+      repositories: ["."],
+      decisions: ["PR-DECISION-01"],
+      relatedIssues: ["MC-200"],
+    }));
+    write(path.join(repo, "global-issues.json"), JSON.stringify({
+      tasks: [{ id: "MC-200", repository: "repo-a", files: ["src/feature.ts"] }],
+    }));
+    write(path.join(repo, "dependency-map.json"), JSON.stringify({ dependencies: [] }));
+    write(path.join(repo, "repo-registry.json"), JSON.stringify({ repositories: { "repo-a": { path: "." } } }));
+    write(path.join(repo, "git-nexus.json"), JSON.stringify({
+      tasks: [{ id: "MC-200", relatedPrs: [77], relatedIssues: ["ISS-1"] }],
+    }));
+    graphify.buildProjectGraph({
+      repositoryRoot: repo,
+      outputDir: path.join(repo, "generated-graphs"),
+      profile: "reviewer",
+      preferExternal: false,
+    });
+    const out = repomix.buildPrContext({
+      repositoryPath: repo,
+      prNumber: "77",
+      outputDir: path.join(repo, "generated-context"),
+      profile: "reviewer",
+    });
+    assert.equal(typeof out.outDir, "string");
+    const summary = fs.readFileSync(path.join(repo, "generated-context", "diff-summary.md"), "utf8");
+    assert.equal(summary.includes("Graph neighborhoods"), true);
   } finally {
     cleanupDir(root);
   }

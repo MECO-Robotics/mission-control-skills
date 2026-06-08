@@ -1,0 +1,4 @@
+extends:
+  - auto
+patterns:
+  - safe

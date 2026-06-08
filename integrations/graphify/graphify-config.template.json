@@ -1,0 +1,19 @@
+{
+  "graphify": {
+    "input": {
+      "repositories": {{REPOSITORY_PATHS}},
+      "include": {{INCLUDE_PATTERNS}},
+      "ignore": {{IGNORE_PATTERNS}}
+    },
+    "analysis": {
+      "includeHistory": true,
+      "depth": "shallow",
+      "maxNodes": 200000,
+      "outputFile": {{OUTPUT_FILE}}
+    },
+    "metadata": {
+      "generatedBy": "mission-control-graphify",
+      "version": "1"
+    }
+  }
+}

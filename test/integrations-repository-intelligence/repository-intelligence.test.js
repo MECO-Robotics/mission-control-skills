@@ -8,6 +8,7 @@ const { createRequire } = require("node:module");
 
 const requireFromRepo = createRequire(__filename);
 const intelligence = requireFromRepo("../../integrations/repository-intelligence/src/engine.js");
+const graphify = requireFromRepo("../../integrations/graphify/src/engine.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "mission-intel-"));
@@ -84,6 +85,22 @@ export function authenticationMiddleware(req, res, next) {
       { number: 11, relatedTasks: ["MC-101"], changedFiles: ["repo-a/src/auth.ts"], decisions: ["DEC-1"] },
     ],
   }));
+  write(path.join(root, "analysis-results", "findings.json"), JSON.stringify({
+    findings: [
+      {
+        id: "F-1001",
+        source: "semgrep",
+        repository: "repo-a",
+        file: "src/auth.ts",
+        line: 10,
+        severity: "high",
+        category: "security",
+        rule: "mc-no-eval",
+        message: "Avoid dynamic code execution in auth middleware.",
+        recommendation: "Use safe parser.",
+      },
+    ],
+  }));
 
   return { root, indexRoot };
 }
@@ -96,6 +113,7 @@ test("build-index creates search domains", () => {
     assert.equal(result.docsIndexPath.endsWith("docs/index.json"), true);
     assert.equal(result.tasksIndexPath.endsWith("tasks/index.json"), true);
     assert.equal(result.dependenciesIndexPath.endsWith("dependencies/index.json"), true);
+    assert.equal(result.findingsIndexPath.endsWith("findings/index.json"), true);
     const valid = intelligence.validateIndex({ repositoryRoot: root, indexRoot });
     assert.equal(valid.valid, true);
   } finally {
@@ -112,6 +130,37 @@ test("semantic-search finds similar implementations", () => {
     assert.equal(result.results.length > 0, true);
     assert.equal(result.mode, "keyword-fallback");
     assert.equal(result.results[0].symbol.includes("MC-101") || result.results[0].file.includes("auth.ts"), true);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test("semantic-search surfaces static analysis findings", () => {
+  const { root, indexRoot } = buildFixtureWorkspace();
+  try {
+    intelligence.buildIndexes({ repositoryRoot: root, indexRoot, profile: "reviewer" });
+    const result = intelligence.semanticSearch({ query: "Avoid dynamic code execution", repositoryRoot: root, indexRoot, limit: 10 });
+    assert.equal(Array.isArray(result.results), true);
+    assert.equal(result.mode === "keyword-fallback" || result.mode === "embedding-disabled", true);
+    assert.equal(result.results.some((row) => row.type === "finding"), true);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test("find_context_for_task includes findings", () => {
+  const { root, indexRoot } = buildFixtureWorkspace();
+  try {
+    intelligence.buildIndexes({ repositoryRoot: root, indexRoot, profile: "reviewer" });
+    const result = intelligence.find_context_for_task({
+      repositoryRoot: root,
+      taskId: "MC-101",
+      profile: "reviewer",
+      limit: 30,
+    });
+    assert.equal(Array.isArray(result.findings), true);
+    assert.equal(result.findings.length > 0, true);
+    assert.equal(typeof result.findings[0].id, "string");
   } finally {
     cleanup(root);
   }
@@ -141,6 +190,31 @@ test("hybrid-search ranks task + dependency + semantic evidence", () => {
     assert.equal(result.results.length > 0, true);
     assert.equal(result.profile, "reviewer");
     assert.equal(result.results[0].ranking.taskRelevance >= 0, true);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test("hybrid-search includes graph-backed results when graph data exists", () => {
+  const { root, indexRoot } = buildFixtureWorkspace();
+  try {
+    graphify.buildProjectGraph({
+      repositoryRoot: root,
+      outputDir: path.join(root, ".graphs"),
+      preferExternal: false,
+      profile: "reviewer",
+    });
+    intelligence.buildIndexes({ repositoryRoot: root, indexRoot, profile: "reviewer" });
+    const result = intelligence.hybridSearch({
+      query: "MC-101",
+      profile: "reviewer",
+      repositoryRoot: root,
+      indexRoot,
+      limit: 20,
+    });
+    const hasGraph = result.results.some((row) => String(row.reason || "").toLowerCase().includes("graph"));
+    assert.equal(hasGraph, true);
+    assert.equal(result.results.length > 0, true);
   } finally {
     cleanup(root);
   }

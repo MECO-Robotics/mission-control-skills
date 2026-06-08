@@ -8,6 +8,7 @@ It supports semantic retrieval, symbol lookup, task/architecture/dependency-awar
 Vector search is optional:
 - Qdrant and Sourcebot integrations are only used when configured and available.
 - Keyword/symbol/path fallback is always deterministic and does not require external services.
+- Optional graph backend from `integrations/graphify/` is used when available to improve graph-aware hybrid retrieval.
 
 ## Top-level Layout
 

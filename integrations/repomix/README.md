@@ -52,6 +52,7 @@ All commands default to the repository root when no path is provided.
 - **Repomix**: used when available on PATH (`repomix` by default), otherwise local scan fallback is used.
 - **Git Nexus**: optional JSON inputs (`global-issues.json`, `dependency-map.json`, `repo-registry.json`, optional `git-nexus.json`) are included when present.
 - **Git Wiki**: optional `git-wiki.json` metadata is included when present.
+- **Graphify**: optional graph neighborhoods can be added to task and PR contexts when `integrations/graphify/` is available.
 
 ## Output metadata
 
@@ -67,4 +68,3 @@ All generated packages include:
   "estimated_tokens": 0
 }
 ```
-

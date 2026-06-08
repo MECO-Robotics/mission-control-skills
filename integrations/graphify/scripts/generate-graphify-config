@@ -1,0 +1,8 @@
+﻿#!/usr/bin/env node
+const cli = require("../src/cli");
+
+const result = cli.commandGenerateGraphifyConfig(process.argv.slice(2));
+if (!result || !result.configPath) {
+  process.exit(1);
+}
+console.log(`config=${result.configPath}`);

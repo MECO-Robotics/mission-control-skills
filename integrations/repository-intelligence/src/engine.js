@@ -5,6 +5,38 @@ const DEFAULT_SEARCH_CONFIG_PATH = path.join(__dirname, "..", "search-config.jso
 const DEFAULT_PROFILES_PATH = path.join(__dirname, "..", "retrieval-profiles.json");
 const INDEX_ROOT = path.join(__dirname, "..", "indexes");
 
+function loadGraphifyEngine() {
+  const candidate = path.resolve(__dirname, "..", "..", "graphify", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function queryGraphBackend(options = {}) {
+  const engine = loadGraphifyEngine();
+  if (!engine || typeof engine.queryProjectGraph !== "function") {
+    return [];
+  }
+  try {
+    return engine.queryProjectGraph({
+      repositoryRoot: options.repositoryRoot || process.cwd(),
+      graphPath: options.graphPath,
+      query: options.query || "",
+      profile: options.profile || "coder",
+      repository: options.repository,
+      taskId: options.taskId,
+      limit: options.limit,
+    }).results || [];
+  } catch {
+    return [];
+  }
+}
+
 function readJson(filePath) {
   if (!fs.existsSync(filePath)) {
     return null;
@@ -448,11 +480,34 @@ function collectWikiRecords(repositoryRoot) {
   return { pages, decisions };
 }
 
+function collectFindingRecords(repositoryRoot) {
+  const findingsPayload = readJson(path.join(repositoryRoot, "analysis-results", "findings.json"));
+  if (!findingsPayload || !Array.isArray(findingsPayload.findings)) {
+    return [];
+  }
+  return findingsPayload.findings
+    .map((row) => ({
+      id: String(row.id || row.rule || "").trim() || `finding-${findingsPayload.findings.indexOf(row) + 1}`,
+      repository: row.repository || ".",
+      file: row.file || "",
+      line: Number(row.line || 0),
+      rule: row.rule || "",
+      message: row.message || "",
+      category: row.category || "general",
+      severity: row.severity || "info",
+      recommendation: row.recommendation || "",
+      symbol: row.symbol || null,
+      source: row.source || "static-analysis",
+    }))
+    .filter((row) => row.file);
+}
+
 function buildIndexContent(repositoryRoot) {
   const sourceConfig = loadSearchConfig();
   const codeItems = [];
   const docItems = [];
   const symbolItems = [];
+  const findingItems = [];
   const sourceEntries = collectSourceEntries(repositoryRoot, {});
 
   for (const entry of sourceEntries) {
@@ -540,6 +595,22 @@ function buildIndexContent(repositoryRoot) {
       source: "git-wiki",
     });
   }
+  for (const finding of collectFindingRecords(repositoryRoot)) {
+    findingItems.push({
+      ...finding,
+      kind: "findings",
+      path: `findings/${finding.repository || "global"}/${finding.id}`,
+      file: finding.file,
+      title: finding.rule || finding.category || "finding",
+      symbol: finding.symbol || finding.id,
+      snippet: snippetFrom(`${finding.message} ${finding.recommendation || ""}`, finding.rule || finding.id),
+      tokenSet: [...tokenSet(`${finding.rule} ${finding.message} ${finding.category} ${finding.severity}`)],
+      repositoryPath: finding.repository || ".",
+      sha1: sha1(`${finding.rule} ${finding.message} ${finding.file}`),
+      size: String(finding.message || finding.recommendation || "").length,
+      content: `${finding.message}\\n${finding.recommendation || ""}`,
+    });
+  }
 
   const manifest = {
     generatedAt: new Date().toISOString(),
@@ -548,6 +619,7 @@ function buildIndexContent(repositoryRoot) {
     docCount: docItems.length,
     taskCount: taskItems.length,
     dependencyCount: depItems.length,
+    findingCount: findingItems.length,
     symbolCount: symbolItems.length,
     sourceFingerprints: sourceEntries.map((entry) => ({
       repository: entry.repositoryPath,
@@ -556,7 +628,7 @@ function buildIndexContent(repositoryRoot) {
     })),
   };
 
-  return { manifest, codeItems, docItems, taskItems, depItems, symbolItems };
+  return { manifest, codeItems, docItems, taskItems, depItems, symbolItems, findingItems };
 }
 
 function writeIndexSet(indexRoot, value, fileName) {
@@ -602,6 +674,7 @@ function buildIndexes(options = {}) {
   const docsDir = path.join(indexRoot, "docs");
   const tasksDir = path.join(indexRoot, "tasks");
   const depsDir = path.join(indexRoot, "dependencies");
+  const findingsDir = path.join(indexRoot, "findings");
 
   const built = buildIndexContent(repositoryRoot);
   const manifestPath = path.join(indexRoot, "manifest.json");
@@ -616,6 +689,7 @@ function buildIndexes(options = {}) {
       docsIndexPath: path.join(docsDir, "index.json"),
       tasksIndexPath: path.join(tasksDir, "index.json"),
       dependenciesIndexPath: path.join(depsDir, "index.json"),
+      findingsIndexPath: path.join(findingsDir, "index.json"),
       skipped: true,
       entries: sourceEntries.length,
     };
@@ -652,12 +726,19 @@ function buildIndexes(options = {}) {
     generatedAt: new Date().toISOString(),
     items: built.symbolItems,
   };
+  const findingsIndex = {
+    repositoryRoot,
+    profile: profileName,
+    generatedAt: new Date().toISOString(),
+    items: built.findingItems,
+  };
 
   const codePath = writeIndexSet(codeDir, codeIndex, "index.json");
   const docsPath = writeIndexSet(docsDir, docsIndex, "index.json");
   const tasksPath = writeIndexSet(tasksDir, tasksIndex, "index.json");
   const depsPath = writeIndexSet(depsDir, dependenciesIndex, "index.json");
   const symbolPath = writeIndexSet(path.join(indexRoot, "symbols"), symbolIndex, "index.json");
+  const findingsPath = writeIndexSet(findingsDir, findingsIndex, "index.json");
 
   const manifest = {
     ...built.manifest,
@@ -679,6 +760,7 @@ function buildIndexes(options = {}) {
     tasksIndexPath: tasksPath,
     dependenciesIndexPath: depsPath,
     symbolIndexPath: symbolPath,
+    findingsIndexPath: findingsPath,
     entries: sourceEntries.length,
     skipped: false,
   };
@@ -713,6 +795,10 @@ function loadDependencyIndex(root = process.cwd(), indexRoot = INDEX_ROOT) {
   return readIndex(path.join(indexRoot, "dependencies", "index.json"));
 }
 
+function loadFindingsIndex(root = process.cwd(), indexRoot = INDEX_ROOT) {
+  return readIndex(path.join(indexRoot, "findings", "index.json"));
+}
+
 function normalizeQuery(input) {
   return String(input || "").trim();
 }
@@ -733,7 +819,8 @@ function semanticSearch(options = {}) {
   const reason = useVector ? "embedding-disabled" : "keyword-fallback";
   const codeIndex = loadCodeIndex(root, options.indexRoot || INDEX_ROOT);
   const docsIndex = loadDocsIndex(root, options.indexRoot || INDEX_ROOT);
-  const all = [...(codeIndex.items || []), ...(docsIndex.items || [])];
+  const findingsIndex = loadFindingsIndex(root, options.indexRoot || INDEX_ROOT);
+  const all = [...(codeIndex.items || []), ...(docsIndex.items || []), ...(findingsIndex.items || [])];
   const qTokens = tokenSet(query);
 
   const results = [];
@@ -745,6 +832,7 @@ function semanticSearch(options = {}) {
     const score = parseFloat(Math.min(1, semanticScore * 0.9 + phraseBonus + exactTitle * 0.1).toFixed(4));
     if (score > 0) {
       const snippet = snippetFrom(String(item.content || ""), query || item.title || item.id || "", config.search?.snippetWindow || 4);
+      const isFinding = item.kind === "findings";
       results.push({
         score,
         repository: item.repository || item.repositoryPath || null,
@@ -753,12 +841,15 @@ function semanticSearch(options = {}) {
         snippet,
         reason: reason === "keyword-fallback" ? "fallback: keyword and token overlap" : "vector+keyword blend",
         query,
-        type: "semantic",
+        type: isFinding ? "finding" : "semantic",
         semanticRelevance: score,
         taskRelevance: 0,
         dependencyRelevance: 0,
         ownershipRelevance: 0,
         documentationRelevance: item.kind === "docs" ? score : 0,
+        symbolRelevance: isFinding ? 0.2 : 0,
+        severity: isFinding ? item.severity : "info",
+        findingId: isFinding ? item.id : undefined,
       });
     }
   }
@@ -872,7 +963,38 @@ function taskSearch(options = {}) {
     if (b.score !== a.score) return b.score - a.score;
     return a.taskId.localeCompare(b.taskId);
   });
-  return { results: results.slice(0, limit), query };
+  const graphRows = queryGraphBackend({
+    repositoryRoot: root,
+    query,
+    profile: options.profile,
+    limit,
+  }).filter((row) => {
+    const nodeType = String(row.node_type || "").toLowerCase();
+    return nodeType === "task" || nodeType === "repository" || nodeType === "decision" || nodeType === "wiki_page";
+  });
+
+  const graphItems = graphRows.map((row) => ({
+    score: row.score || 0,
+    taskId: row.task_id || (row.symbol || "").toUpperCase(),
+    repository: row.repository || null,
+    files: row.file ? [row.file] : [],
+    snippet: row.reason || `graph match: ${row.node_id}`,
+    title: row.symbol || row.title || row.node_id || "",
+    reason: "graph task relation",
+    type: "task",
+    taskRelevance: 0.5,
+    dependencyRelevance: 0,
+    ownershipRelevance: repositoryOwnershipBoost(row, query, normalizeProfile(loadProfiles()[options.profile] || loadProfiles().coder)),
+    semanticRelevance: 0.1,
+    symbolRelevance: 0,
+    documentationRelevance: 0,
+  }));
+  const merged = [...results, ...graphItems];
+  merged.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return String(a.taskId || a.file).localeCompare(String(b.taskId || b.file));
+  });
+  return { results: merged.slice(0, limit), query, total: merged.length };
 }
 
 function dependencySearch(options = {}) {
@@ -905,7 +1027,44 @@ function dependencySearch(options = {}) {
     if (b.score !== a.score) return b.score - a.score;
     return `${a.from}${a.to}`.localeCompare(`${b.from}${b.to}`);
   });
-  return { results: rows.slice(0, limit), query };
+  const graphRows = queryGraphBackend({
+    repositoryRoot: options.repositoryRoot || process.cwd(),
+    query: query.toLowerCase(),
+    profile: options.profile,
+    limit,
+  }).filter((row) => String(row.node_type).toLowerCase() === "dependency" || String(row.node_type).toLowerCase() === "task" || Array.isArray(row.neighbors));
+  const merged = rows.slice();
+  for (const row of graphRows) {
+    if (Array.isArray(row.neighbors)) {
+      for (const edge of row.neighbors) {
+        if (String(edge.edge_type || "").toLowerCase() !== "depends_on") {
+          continue;
+        }
+        const targetId = String(edge.node_id || edge.to || "");
+        merged.push({
+          score: row.score || 0.5,
+          repository: row.repository || null,
+          from: row.node_id || row.file || "",
+          to: targetId,
+          type: "depends_on",
+          direction: "graph",
+          snippet: `graph link: ${row.node_id || row.file || ""} -> ${targetId}`,
+          reason: row.reason || "graph dependency relation",
+          taskRelevance: 0.7,
+          dependencyRelevance: 0.9,
+          ownershipRelevance: 0,
+          semanticRelevance: 0,
+          symbolRelevance: 0,
+          documentationRelevance: 0,
+        });
+      }
+    }
+  }
+  merged.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return `${a.from}${a.to}`.localeCompare(`${b.from}${b.to}`);
+  });
+  return { results: merged.slice(0, limit), query };
 }
 
 function architectureSearch(options = {}) {
@@ -975,6 +1134,36 @@ function rankCombined(results) {
   return results;
 }
 
+function graphRowsToHybrid(graphRows, profile, query) {
+  if (!Array.isArray(graphRows)) return [];
+  return graphRows
+    .map((row) => {
+      const symbol = row.symbol || null;
+      const nodeType = String(row.node_type || row.nodeType || "").toLowerCase();
+      const neighbors = Array.isArray(row.neighbors) ? row.neighbors : [];
+      const isDependencyEdge = neighbors.some((neighbor) => {
+        const nType = String(neighbor.edge_type || neighbor.type || "").toLowerCase();
+        return nType === "depends_on" || nType === "depends_on";
+      });
+      return {
+        score: row.score || 0,
+        repository: row.repository || null,
+        file: row.file || null,
+        symbol,
+        query: String(query || ""),
+        taskRelevance: nodeType === "task" ? (row.score || 0.7) : 0,
+        dependencyRelevance: isDependencyEdge ? 0.8 : row.node_type === "dependency" ? 0.6 : 0,
+        ownershipRelevance: repositoryOwnershipBoost(row, String(query), profile),
+        semanticRelevance: 0,
+        symbolRelevance: nodeType === "symbol" || ["function", "class", "interface", "module"].includes(nodeType) ? row.score || 0 : 0,
+        documentationRelevance: nodeType === "wiki_page" || nodeType === "document" || nodeType === "decision" ? row.score || 0 : 0,
+        type: "graph",
+        reason: row.reason || "graph neighborhood match",
+      };
+    })
+    .filter((row) => row.score > 0);
+}
+
 function mergeByFile(results) {
   const byKey = new Map();
   for (const item of results) {
@@ -1019,15 +1208,25 @@ function hybridSearch(options = {}) {
   const profileName = options.profile || "coder";
   const profiles = loadProfiles();
   const profile = normalizeProfile(profiles[profileName] || profiles.coder || {});
+  const root = path.resolve(options.repositoryRoot || process.cwd());
 
   const semantic = semanticSearch({ ...options, profile: profileName }).results || [];
   const symbol = symbolSearch({ ...options, symbolName: query, profile: profileName }).results || [];
   const tasks = taskSearch({ ...options, profile: profileName, query }).results || [];
   const deps = dependencySearch({ ...options, profile: profileName, query }).results || [];
   const arch = architectureSearch({ ...options, profile: profileName, query }).results || [];
+  const graphRows = queryGraphBackend({
+    repositoryRoot: root,
+    query,
+    profile: profileName,
+    limit: Math.max(5, Math.ceil(limit / 2)),
+  }).map((row) => toHybridResult(row, query, profile));
 
   const combined = [];
   for (const row of [...semantic, ...symbol, ...tasks, ...deps, ...arch]) {
+    combined.push(toHybridResult(row, query, profile));
+  }
+  for (const row of graphRows) {
     combined.push(toHybridResult(row, query, profile));
   }
 
@@ -1076,6 +1275,7 @@ function find_context_for_task(options = {}) {
   const decisions = [];
   const documentation = [];
   const dependencies = [];
+  const findings = [];
   const repositories = new Set();
 
   for (const row of ranked.slice(0, limit)) {
@@ -1095,12 +1295,65 @@ function find_context_for_task(options = {}) {
         path: row.file || row.symbol || "",
       });
     }
+    if (row.type === "finding") {
+      findings.push({
+        id: row.findingId || row.symbol || row.repository + ":" + row.file,
+        repository: row.repository || null,
+        file: row.file || "",
+        severity: row.severity || "info",
+        symbol: row.symbol || "",
+        score: row.score || 0,
+        reason: row.reason || "finding",
+      });
+    }
     if (row.type === "task" && row.taskId && row.taskId !== taskId) {
       dependencies.push({ from: taskId, to: row.taskId, type: "task-related" });
     }
     if (row.type === "dependency" || row.from) {
       if (row.from && row.to) {
         dependencies.push({ from: row.from, to: row.to, type: row.type || "depends_on" });
+      }
+    }
+  }
+  const graphRows = queryGraphBackend({
+    repositoryRoot: root,
+    query: taskId,
+    profile: profile.name,
+    taskId,
+    limit: Math.max(8, Math.ceil(limit / 2)),
+  });
+  for (const row of graphRows) {
+    if (row.file) {
+      files.push({
+        repository: row.repository || null,
+        path: row.file,
+      });
+    }
+    if (row.node_type === "decision") {
+      decisions.push(row.symbol || row.title || row.node_id || "");
+    }
+    if (row.node_type === "wiki_page" || row.node_type === "document") {
+      documentation.push({ repository: row.repository || null, path: row.file || row.symbol || row.node_id || "" });
+    }
+    if (row.node_type === "finding") {
+      findings.push({
+        id: row.node_id,
+        repository: row.repository || null,
+        file: row.file || "",
+        reason: row.reason || "graph finding",
+      });
+    }
+    if (row.node_type === "dependency" || row.node_type === "task") {
+      if (row.neighbors && Array.isArray(row.neighbors)) {
+        for (const edge of row.neighbors) {
+          if (edge.node_id && edge.node_id !== row.node_id) {
+            dependencies.push({
+              from: row.node_id,
+              to: edge.node_id,
+              type: edge.edge_type || "related_to",
+            });
+          }
+        }
       }
     }
   }
@@ -1121,6 +1374,7 @@ function find_context_for_task(options = {}) {
     decisions: [...new Set(decisions)],
     documentation: [...new Set(documentation.map((row) => JSON.stringify(row)))].map((row) => JSON.parse(row)),
     dependencies,
+    findings,
     relatedTasks: taskMatches.results.map((row) => row.taskId).filter(Boolean),
     repositoryCount: repositories.size,
     query,
@@ -1155,12 +1409,16 @@ function find_context_for_pr(options = {}) {
   const dependencies = [];
   const decisions = [];
   const documentation = [];
+  const findings = [];
 
   for (const hit of taskQueries) {
     mergedFiles.push(...hit.files);
     dependencies.push(...hit.dependencies);
     decisions.push(...hit.decisions);
     documentation.push(...hit.documentation);
+    if (Array.isArray(hit.findings)) {
+      findings.push(...hit.findings);
+    }
   }
 
   const semantic = [];
@@ -1174,6 +1432,43 @@ function find_context_for_pr(options = {}) {
   const ranked = rankCombined(
     semantic.map((row) => toHybridResult(row, prNumber, normalizeProfile((loadProfiles().reviewer || {})))),
   );
+  const graphRows = queryGraphBackend({
+    repositoryRoot: root,
+    query: prNumber,
+    profile: "reviewer",
+    limit: Math.max(5, Math.ceil(limit / 2)),
+  });
+  for (const row of graphRows) {
+    if (row.file) {
+      mergedFiles.push({
+        repository: row.repository || null,
+        path: row.file,
+      });
+    }
+    if (row.node_type === "decision") {
+      decisions.push(row.symbol || row.title || row.node_id || "decision");
+    }
+    if (Array.isArray(row.neighbors)) {
+      for (const neighbor of row.neighbors) {
+        dependencies.push({
+          from: row.node_id || prNumber,
+          to: neighbor.node_id || "",
+          type: neighbor.edge_type || "related_to",
+        });
+      }
+    }
+    if (row.node_type === "wiki_page" || row.node_type === "document") {
+      documentation.push({ repository: row.repository || null, path: row.file || row.node_id || row.symbol || "" });
+    }
+    if (row.node_type === "finding") {
+      findings.push({
+        id: row.node_id,
+        repository: row.repository || null,
+        file: row.file || "",
+        reason: row.reason || "graph finding",
+      });
+    }
+  }
 
   return {
     prNumber,
@@ -1181,6 +1476,7 @@ function find_context_for_pr(options = {}) {
     files: mergedFiles,
     decisions: [...new Set(decisions)],
     dependencies,
+    findings: [...new Map(findings.map((row) => [`${row.id || row.repository || ""}|${row.file || ""}|${row.reason || ""}`, row])).values()],
     documentation: [...new Set(documentation.map((row) => JSON.stringify(row)))].map((row) => JSON.parse(row)),
     relatedTasks,
     relatedReviews: ranked.slice(0, limit).map((row) => ({ file: row.file, repository: row.repository, score: row.rankScore || row.score || 0 })),
@@ -1199,7 +1495,7 @@ function validateIndex(options = {}) {
   const manifest = readJson(manifestPath);
   const failures = [];
 
-  const required = ["code", "docs", "tasks", "dependencies"];
+  const required = ["code", "docs", "tasks", "dependencies", "findings"];
   for (const dir of required) {
     const p = path.join(indexRoot, dir, "index.json");
     if (!fs.existsSync(p)) {
@@ -1217,9 +1513,17 @@ function validateIndex(options = {}) {
     loadDocsIndex(options.repositoryRoot || process.cwd(), indexRoot),
     loadTasksIndex(options.repositoryRoot || process.cwd(), indexRoot),
     loadDependencyIndex(options.repositoryRoot || process.cwd(), indexRoot),
+    loadFindingsIndex(options.repositoryRoot || process.cwd(), indexRoot),
     loadSymbolIndex(options.repositoryRoot || process.cwd(), indexRoot),
   ];
-  const pathCounts = indexes.map((idx, i) => ({ kind: required[i] || "symbol", count: (idx && idx.items ? idx.items.length : 0) }));
+  const pathCounts = [
+    { kind: "code", count: (loadCodeIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
+    { kind: "docs", count: (loadDocsIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
+    { kind: "tasks", count: (loadTasksIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
+    { kind: "dependencies", count: (loadDependencyIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
+    { kind: "findings", count: (loadFindingsIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
+    { kind: "symbols", count: (loadSymbolIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
+  ];
 
   const seenPaths = new Set();
   for (const idx of indexes) {

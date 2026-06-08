@@ -16,6 +16,8 @@ function parseArgs(argv) {
       i += 1;
     } else if (arg === "--no-repomix") {
       out.preferRepomix = false;
+    } else if (arg === "--no-graph-context") {
+      out.includeGraphContext = false;
     } else if (arg.startsWith("--")) {
       // ignore unknown flags for forward compatibility
     } else if (!out._positional0) {
@@ -48,7 +50,13 @@ function commandBuildTaskContext(argv) {
     throw new Error("build-task-context requires task id.");
   }
   const profile = parsed.profile || "coder";
-  return engine.buildTaskContext({ repositoryPath: parsed.repositoryPath || process.cwd(), taskId, profile, outputDir: parsed.outputDir });
+  return engine.buildTaskContext({
+    repositoryPath: parsed.repositoryPath || process.cwd(),
+    taskId,
+    profile,
+    outputDir: parsed.outputDir,
+    includeGraphContext: parsed.includeGraphContext !== false,
+  });
 }
 
 function commandBuildPrContext(argv) {
@@ -58,7 +66,13 @@ function commandBuildPrContext(argv) {
     throw new Error("build-pr-context requires PR number.");
   }
   const profile = parsed.profile || "reviewer";
-  return engine.buildPrContext({ repositoryPath: parsed.repositoryPath || process.cwd(), prNumber, profile, outputDir: parsed.outputDir });
+  return engine.buildPrContext({
+    repositoryPath: parsed.repositoryPath || process.cwd(),
+    prNumber,
+    profile,
+    outputDir: parsed.outputDir,
+    includeGraphContext: parsed.includeGraphContext !== false,
+  });
 }
 
 function commandValidateContextBudget(argv) {

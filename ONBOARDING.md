@@ -24,3 +24,25 @@ Use it to get context-relevant files, symbols, tasks, dependencies, architecture
 - Git Nexus and Git Wiki are optional enrichments only.
 
 For PR review: when touching agent-context workflows, keep orchestration and ranking logic anchored here so all repos remain aligned.
+
+## Graphify adapter
+
+Mission Control now includes `integrations/graphify/` for optional knowledge-graph construction and retrieval.
+
+Use Graphify to build and query relationships for:
+
+- architecture-aware retrieval
+- dependency-aware task planning
+- repository/task/decision/pr neighborhoods for Codex context selection
+
+Graphify is optional:
+
+- If a Graphify binary is available, Mission Control can consume it.
+- If unavailable, Mission Control uses local graph extraction from repository files and metadata.
+- Git Nexus and Git Wiki input files are optional enrichments when present.
+
+Graph outputs are used by:
+
+- repository-intelligence hybrid retrieval,
+- Repomix task/PR context exports,
+- graph summaries for cross-repo planning.

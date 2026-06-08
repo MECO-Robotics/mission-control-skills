@@ -5,6 +5,7 @@ const childProcess = require("child_process");
 
 const DEFAULT_PROFILES_PATH = path.join(__dirname, "..", "context-profiles.json");
 const DEFAULT_TEMPLATE_PATH = path.join(__dirname, "..", "repomix-config.template.json");
+const STATIC_ANALYSIS_RESULTS_PATH = "analysis-results/findings.json";
 
 function normalizeProfile(raw) {
   return {
@@ -189,7 +190,14 @@ function walkFiles(rootAbs, profile) {
   return files;
 }
 
-function metadataEnvelope({ profile, repositories, tasks, dependencies, files }) {
+function metadataEnvelope({
+  profile,
+  repositories,
+  tasks,
+  dependencies,
+  files,
+  staticFindings = [],
+}) {
   const estimatedTokens = files.reduce((sum, f) => sum + f.tokens, 0);
   return {
     generated_at: new Date().toISOString(),
@@ -197,6 +205,7 @@ function metadataEnvelope({ profile, repositories, tasks, dependencies, files })
     repositories: [...repositories],
     tasks: [...tasks],
     dependencies: [...dependencies],
+    static_findings: [...staticFindings],
     estimated_tokens: estimatedTokens,
     file_count: files.length,
   };
@@ -492,6 +501,12 @@ function buildTaskContext(options) {
   const repoIntelligence = loadRepositoryIntelligenceModule();
   let files = [];
   let intelligenceContext = null;
+  let graphContextPath = null;
+  const staticFindings = collectStaticAnalysisForTask(repositoryRoot, {
+    taskId: seedId,
+    files: [],
+    resultDir: options.resultDir || "analysis-results",
+  });
   if (repoIntelligence && typeof repoIntelligence.find_context_for_task === "function") {
     try {
       repoIntelligence.buildIndexes({ repositoryRoot });
@@ -517,6 +532,18 @@ function buildTaskContext(options) {
       }
     }
   }
+  if (options.includeGraphContext !== false) {
+    const graphContextResult = buildGraphContextForTask({
+      repositoryRoot,
+      profile,
+      taskId: seedId,
+      outputDir: path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context")),
+      graphPath: path.join(repositoryRoot, "generated-graphs", "project-graph.json"),
+    });
+    if (graphContextResult && graphContextResult.graphContextMdPath) {
+      graphContextPath = graphContextResult.graphContextMdPath;
+    }
+  }
   files.sort((a, b) => a.path.localeCompare(b.path));
   files = files.filter((file, index, arr) => arr.findIndex((row) => row.path === file.path) === index);
   if (options.limit && files.length > options.limit) {
@@ -531,13 +558,31 @@ function buildTaskContext(options) {
     tasks: related.map((task) => task.id),
     dependencies: relationships,
     files,
+    staticFindings: staticFindings.map((finding) => ({
+      id: finding.id,
+      repository: finding.repository,
+      file: finding.file,
+      line: finding.line,
+      severity: finding.severity,
+      rule: finding.rule,
+      category: finding.category,
+      source: finding.source,
+    })),
   });
   const outDir = path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context"));
   const xmlPath = path.join(outDir, "task-context.xml");
   const mdSummary = path.join(outDir, "task-summary.md");
   const mdDeps = path.join(outDir, "task-dependencies.md");
   writeIfNeeded(xmlPath, generateRepoXml({ metadata, files }));
-  writeIfNeeded(mdSummary, summarizeFiles(files, xmlPath, `Task ${seedId} Summary`));
+  const summary = summarizeFiles(files, xmlPath, `Task ${seedId} Summary`);
+  const extraSummary = [];
+  if (graphContextPath) {
+    extraSummary.push("");
+    extraSummary.push("## Graph context");
+    extraSummary.push(`Graph context summary: ${path.basename(graphContextPath)}`);
+    extraSummary.push(`Graph context JSON: ${graphContextResultPath(graphContextPath)}`);
+  }
+  writeIfNeeded(mdSummary, `${summary}\n${extraSummary.join("\n")}\n`);
   const depLines = [`# Task Dependencies for ${seedId}`, "", ...relationships.map((edge) => `- ${edge.from} -> ${edge.to} (${edge.type})`)];
   if (relationships.length === 0) depLines.push("- no explicit dependencies");
   depLines.push("");
@@ -579,10 +624,18 @@ function buildTaskContext(options) {
     estimated_tokens: metadata.estimated_tokens,
     file_count: metadata.file_count,
     repomix_used: false,
+    graph_context: graphContextPath || null,
     files: files.map((f) => ({ path: f.path, size: f.size, tokens: f.tokens, sha1: f.sha1, kind: f.kind })),
   };
   writeIfNeeded(path.join(outDir, "token-report.json"), JSON.stringify(tokenReport, null, 2));
-  return { outDir, xmlPath, mdSummary, mdDeps, metadata };
+  return {
+    outDir,
+    xmlPath,
+    mdSummary,
+    mdDeps,
+    metadata,
+    graphContextPath,
+  };
 }
 
 function buildPrContext(options) {
@@ -610,7 +663,7 @@ function buildPrContext(options) {
   }, null);
   const changedFiles = Array.isArray(prRecord?.changedFiles) ? prRecord.changedFiles : [];
   const repos = Array.isArray(prRecord?.repositories) ? prRecord.repositories : ["."];
-  const files = [];
+  let files = [];
   for (const repo of repos) {
     const absRepo = path.resolve(repositoryRoot, repo);
     const candidate = walkFiles(absRepo, profile).map((file) => {
@@ -626,12 +679,75 @@ function buildPrContext(options) {
     files.push(...candidate);
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
+  const staticFindings = collectStaticAnalysisForPr(repositoryRoot, {
+    prId,
+    files,
+    resultDir: options.resultDir || "analysis-results",
+  });
+  for (const finding of staticFindings) {
+    if (!finding.file) {
+      continue;
+    }
+    const normalized = String(finding.file || "").replace(/\\+/g, "/");
+    const found = files.some((row) => row.path.replace(/\\+/g, "/").toLowerCase() === normalized.toLowerCase());
+    if (found) {
+      continue;
+    }
+    const repoLabel = repos.includes(".") ? "." : repos[0] || ".";
+    const candidateRepo = repos.includes(finding.repository || "") ? (finding.repository || ".") : repoLabel;
+    const repositoryBase = path.resolve(repositoryRoot, candidateRepo === "." ? "." : candidateRepo);
+    const abs = path.resolve(repositoryBase, normalized);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      continue;
+    }
+    const content = readTextSafe(abs);
+    if (content === null) {
+      continue;
+    }
+    const rel = path.relative(repositoryRoot, abs).replace(/\\/g, "/");
+    const isDoc = isDocPath(rel, profile.documentationSuffixes || []);
+    files.push({
+      path: rel,
+      abs,
+      size: fs.statSync(abs).size,
+      content,
+      kind: isDoc ? "doc" : "code",
+      tokens: estimateTokens(content),
+      sha1: sha1(content),
+    });
+  }
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  const graphNeighborhood = collectPrGraphNeighborhood({
+    repositoryRoot,
+    changedFiles,
+    repositories: repos,
+    profileName: profile.name,
+    querySeed: prId,
+    graphPath: path.join(repositoryRoot, "generated-graphs", "project-graph.json"),
+  });
+  for (const file of graphNeighborhood.files) {
+    const duplicate = files.some((row) => row.path.replace(/\\/g, "/") === file.path.replace(/\\/g, "/"));
+    if (!duplicate) {
+      files.push(file);
+    }
+  }
+  files.sort((a, b) => a.path.localeCompare(b.path));
   const metadata = metadataEnvelope({
     profile: profile.name,
     repositories: repos,
     tasks: [],
     dependencies: [],
     files,
+    staticFindings: staticFindings.map((finding) => ({
+      id: finding.id,
+      repository: finding.repository,
+      file: finding.file,
+      line: finding.line,
+      severity: finding.severity,
+      rule: finding.rule,
+      category: finding.category,
+      source: finding.source,
+    })),
   });
   const nexus = loadNexusMetadata(repositoryRoot, null, prId) || {};
   const wiki = loadWikiMetadata(repositoryRoot) || {};
@@ -667,7 +783,14 @@ function buildPrContext(options) {
     repoLines.push(`- ${repo}`);
   }
   writeIfNeeded(affectedReposPath, `${repoLines.join("\n")}\n`);
-  writeIfNeeded(mdSummary, summarizeFiles(files, xmlPath, `PR-${prId} Diff Summary`));
+  const baseSummary = summarizeFiles(files, xmlPath, `PR-${prId} Diff Summary`);
+  const neighborhoodLines = [];
+  if (graphNeighborhood.lines.length > 0) {
+    neighborhoodLines.push("");
+    neighborhoodLines.push("## Graph neighborhoods");
+    neighborhoodLines.push(...graphNeighborhood.lines);
+  }
+  writeIfNeeded(mdSummary, `${baseSummary}\n${neighborhoodLines.join("\n")}\n`);
   writeIfNeeded(path.join(outDir, "token-report.json"), JSON.stringify({
     generated_at: metadata.generated_at,
     profile: profile.name,
@@ -677,6 +800,7 @@ function buildPrContext(options) {
     estimated_tokens: metadata.estimated_tokens,
     file_count: metadata.file_count,
     repomix_used: false,
+    graph_neighborhood_files: graphNeighborhood.files.length,
     files: files.map((f) => ({ path: f.path, size: f.size, tokens: f.tokens, sha1: f.sha1, kind: f.kind })),
   }, null, 2));
   return { outDir, xmlPath, mdSummary, relatedDecisionsPath, affectedReposPath, metadata };
@@ -780,6 +904,211 @@ function loadRepositoryIntelligenceModule() {
   } catch {
     return null;
   }
+}
+
+function loadGraphifyModule() {
+  const candidate = path.resolve(__dirname, "..", "..", "graphify", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function graphContextResultPath(graphContextPath) {
+  if (!graphContextPath) {
+    return "not generated";
+  }
+  return path.resolve(graphContextPath);
+}
+
+function readGraphifyGraph(graphPath) {
+  if (!graphPath || !fs.existsSync(graphPath)) return null;
+  try {
+    const raw = fs.readFileSync(graphPath, "utf8");
+    const graph = JSON.parse(raw);
+    if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return null;
+    return graph;
+  } catch {
+    return null;
+  }
+}
+
+function loadStaticAnalysisModule() {
+  const candidate = path.resolve(__dirname, "..", "..", "static-analysis", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function collectStaticAnalysisForTask(repositoryRoot, options = {}) {
+  const staticAnalysis = loadStaticAnalysisModule();
+  if (!staticAnalysis) {
+    return [];
+  }
+  const payload = staticAnalysis.loadStaticAnalysisResults(repositoryRoot, options.resultDir || "analysis-results");
+  const findings = Array.isArray(payload.findings) ? payload.findings : [];
+  const taskId = String(options.taskId || "").toUpperCase();
+  const normalizedFiles = new Set((Array.isArray(options.files) ? options.files : []).map((row) => String(row.path || "").replace(/\\+/g, "/").toLowerCase()));
+
+  return findings.filter((finding) => {
+    if (!taskId) {
+      return finding.file && normalizedFiles.has(String(finding.file || "").toLowerCase());
+    }
+    if (String(finding.metadata?.taskId || "").toUpperCase() === taskId) {
+      return true;
+    }
+    if ((finding.message || "").toLowerCase().includes(taskId.toLowerCase())) {
+      return true;
+    }
+    return normalizedFiles.has(String(finding.file || "").toLowerCase()) && finding.severity === "critical";
+  });
+}
+
+function collectStaticAnalysisForPr(repositoryRoot, options = {}) {
+  const staticAnalysis = loadStaticAnalysisModule();
+  if (!staticAnalysis) {
+    return [];
+  }
+  const payload = staticAnalysis.loadStaticAnalysisResults(repositoryRoot, options.resultDir || "analysis-results");
+  const findings = Array.isArray(payload.findings) ? payload.findings : [];
+  const prId = String(options.prId || "");
+  const normalizedFiles = new Set((Array.isArray(options.files) ? options.files : []).map((row) => String(row.path || "").replace(/\\+/g, "/").toLowerCase()));
+  return findings.filter((finding) => {
+    if (prId && String(finding.metadata?.prId || "").toUpperCase() === prId.toUpperCase()) {
+      return true;
+    }
+    if (normalizedFiles.has(String(finding.file || "").toLowerCase())) {
+      return true;
+    }
+    if (prId && (finding.message || "").toLowerCase().includes(prId.toLowerCase())) {
+      return true;
+    }
+    return false;
+  });
+}
+
+function buildGraphContextForTask(options) {
+  const graphify = loadGraphifyModule();
+  if (!graphify || typeof graphify.exportGraphContext !== "function") {
+    return null;
+  }
+  const repositoryRoot = path.resolve(options.repositoryRoot || process.cwd());
+  const outputDir = path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context"));
+  const graphPath = path.resolve(options.graphPath || path.join(repositoryRoot, "generated-graphs", "project-graph.json"));
+  if (!fs.existsSync(graphPath) && typeof graphify.buildProjectGraph === "function") {
+    graphify.buildProjectGraph({
+      repositoryRoot,
+      profile: options.profile?.name || options.profile || "coder",
+      outputDir: path.join(repositoryRoot, "generated-graphs"),
+      outputFile: "project-graph.json",
+      preferExternal: false,
+    });
+  }
+  return graphify.exportGraphContext({
+    repositoryRoot,
+    outputDir,
+    graphPath,
+    profile: options.profile?.name || options.profile || "coder",
+    taskId: options.taskId,
+  });
+}
+
+function collectPrGraphNeighborhood(options) {
+  const graphify = loadGraphifyModule();
+  if (!graphify || typeof graphify.queryProjectGraph !== "function" || typeof graphify.loadProfiles !== "function") {
+    return { files: [], lines: [] };
+  }
+  const repositoryRoot = path.resolve(options.repositoryRoot || process.cwd());
+  const graphPath = path.resolve(options.graphPath || path.join(repositoryRoot, "generated-graphs", "project-graph.json"));
+  const profileName = options.profileName || "reviewer";
+  const profile = normalizeProfile(loadProfiles()[profileName] || loadProfiles().coder || {});
+  if (!fs.existsSync(graphPath) && typeof graphify.buildProjectGraph === "function") {
+    graphify.buildProjectGraph({
+      repositoryRoot,
+      profile: profileName,
+      outputDir: path.join(repositoryRoot, "generated-graphs"),
+      outputFile: "project-graph.json",
+      preferExternal: false,
+    });
+  }
+  const queryGraph = graphify.queryProjectGraph({
+    repositoryRoot,
+    graphPath,
+    profile: profileName,
+    query: `${options.querySeed || ""} ${options.changedFiles.join(" ")}`,
+    limit: Math.max(10, options.maxFiles || 25),
+  });
+  const graph = readGraphifyGraph(graphPath);
+  if (!graph) {
+    return {
+      files: [],
+      lines: [],
+    };
+  }
+  const nodesById = new Map(graph.nodes.map((row) => [row.id, row]));
+  const filePaths = new Map();
+  const addPath = (repo, candidate) => {
+    if (!candidate || typeof candidate !== "string") {
+      return;
+    }
+    const normalized = candidate.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!filePaths.has(normalized)) {
+      filePaths.set(normalized, repo || ".");
+    }
+  };
+  for (const result of queryGraph.results || []) {
+    if (result.file) {
+      addPath(result.repository || "", result.file);
+    }
+    for (const neighbor of result.neighbors || []) {
+      const target = nodesById.get(neighbor.node_id);
+      if (!target) continue;
+      if (target.file) {
+        addPath(target.repository || result.repository || "", target.file);
+      }
+    }
+  }
+
+  const linesOut = [];
+  const filesOut = [];
+  for (const [filePath, repository] of filePaths) {
+    const repoBase = (repository || ".").replace(/\\/g, "/").replace(/^\.\//, "");
+    const repositoryAbs = path.resolve(repositoryRoot, repoBase === "." ? "." : repoBase);
+    const fileAbs = path.resolve(repositoryAbs, filePath);
+    if (!fs.existsSync(fileAbs) || !fs.statSync(fileAbs).isFile()) {
+      continue;
+    }
+    if (!shouldIncludeFile(path.relative(repositoryRoot, fileAbs).replace(/\\/g, "/"), profile)) continue;
+    const rel = path.relative(repositoryRoot, fileAbs).replace(/\\/g, "/");
+    const content = readTextSafe(fileAbs);
+    if (content === null) continue;
+    const isDoc = isDocPath(rel, profile.documentationSuffixes || []);
+    const row = {
+      path: rel,
+      abs: fileAbs,
+      size: fs.statSync(fileAbs).size,
+      content,
+      kind: isDoc ? "doc" : "code",
+      tokens: estimateTokens(content),
+      sha1: sha1(content),
+      repository,
+    };
+    filesOut.push(row);
+    linesOut.push(`- ${rel}`);
+  }
+  return {
+    files: filesOut,
+    lines: linesOut,
+  };
 }
 
 function collectTaskFilesFromContext(repositoryRoot, profile, intelligenceRecords) {

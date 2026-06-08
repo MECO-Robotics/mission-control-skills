@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+const cli = require("../src/cli");
+const result = cli.commandValidateMergeReadiness(process.argv.slice(2));
+console.log(`merge_ready=${result.merge_ready}`);
+console.log(`blocking=${result.blocking_findings.length}`);
