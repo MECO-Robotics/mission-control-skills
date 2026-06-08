@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "id": "arch-001",
+      "query": "Decompose MC task into architecture modules and ownership",
+      "type": "text",
+      "requiredArtifacts": ["generated-context/task-context.xml", "generated-context/task-summary.md"]
+    },
+    {
+      "id": "arch-002",
+      "query": "Identify dependencies and related tasks",
+      "type": "text",
+      "requiredArtifacts": ["dependency-map.json", "global-issues.json"]
+    }
+  ]
+}

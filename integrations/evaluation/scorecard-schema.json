@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MissionControlEvaluationSchema",
+  "type": "object",
+  "required": [
+    "evaluation_id",
+    "provider",
+    "suite",
+    "timestamp",
+    "score",
+    "max_score",
+    "pass",
+    "metrics",
+    "notes"
+  ],
+  "properties": {
+    "evaluation_id": { "type": "string" },
+    "provider": { "type": "string" },
+    "suite": {
+      "type": "string",
+      "enum": ["architect", "coder", "reviewer", "maintainer", "retrieval", "workflow"]
+    },
+    "timestamp": { "type": "string" },
+    "score": { "type": "number" },
+    "max_score": { "type": "number" },
+    "pass": { "type": "boolean" },
+    "metrics": { "type": "object" },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

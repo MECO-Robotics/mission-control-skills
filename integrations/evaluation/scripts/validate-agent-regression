@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+const engine = require("../src/engine");
+const result = engine.validateAgentRegression(process.argv.slice(2));
+console.log(`passed=${result.passed}`);
+console.log(`blocking=${result.blocking_regressions.length}`);

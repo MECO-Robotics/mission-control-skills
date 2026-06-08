@@ -1,0 +1,20 @@
+{
+  "evaluation_id": "eval-baseline-sample-architect",
+  "provider": "promptfoo",
+  "suite": "architect",
+  "timestamp": "2026-01-01T00:00:00.000Z",
+  "score": 78,
+  "max_score": 100,
+  "pass": true,
+  "metrics": {
+    "decomposition_quality": 80,
+    "dependency_identification": 72,
+    "repository_ownership_accuracy": 83,
+    "task_planning_quality": 70
+  },
+  "notes": ["baseline sample"],
+  "artifacts": {
+    "task_context": "generated-context/task-context.xml"
+  },
+  "dependencies": ["global-issues.json", "dependency-map.json"]
+}
