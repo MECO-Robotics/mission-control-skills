@@ -1,0 +1,14 @@
+{
+  "query": "authenticationMiddleware",
+  "type": "symbol",
+  "results": [
+    {
+      "repository": "repo-a",
+      "file": "repo-a/src/auth.ts",
+      "symbol": "authenticationMiddleware",
+      "location": "repo-a/src/auth.ts:12",
+      "score": 1.0,
+      "reason": "exact symbol match"
+    }
+  ]
+}

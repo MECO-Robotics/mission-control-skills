@@ -17,6 +17,18 @@ function loadGraphifyEngine() {
   }
 }
 
+function loadCodeSearchEngine() {
+  const candidate = path.resolve(__dirname, "..", "..", "code-search", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
 function queryGraphBackend(options = {}) {
   const engine = loadGraphifyEngine();
   if (!engine || typeof engine.queryProjectGraph !== "function") {
@@ -869,6 +881,52 @@ function symbolSearch(options = {}) {
   const qLower = query.toLowerCase();
   const exact = [];
   const partial = [];
+  const codeSearchPayload = (() => {
+    const engine = loadCodeSearchEngine();
+    if (!engine || typeof engine.searchSymbol !== "function") {
+      return [];
+    }
+    try {
+      return engine.searchSymbol({
+        repositoryRoot: root,
+        symbolName: query,
+        limit,
+        outputDir: options.outputDir,
+        preferSourcebot: false,
+      }).results || [];
+    } catch {
+      return [];
+    }
+  })();
+  const byLocation = new Map();
+  for (const row of codeSearchPayload) {
+    const key = `${row.repository}|${row.file}|${row.symbol}|${row.location || ""}`;
+    if (byLocation.has(key)) continue;
+    byLocation.set(key, row);
+    const payload = {
+      score: row.score || 1,
+      repository: row.repository,
+      file: row.file,
+      symbol: row.symbol,
+      snippet: row.snippet || "",
+      line: row.line || 0,
+      kind: "symbol",
+      exact: String(row.symbol || "").toLowerCase() === qLower,
+      references: [],
+      relatedSymbols: [],
+      reason: "exact symbol match from code-search",
+      query: qLower,
+      type: "symbol",
+      symbolRelevance: 1,
+      semanticRelevance: 0,
+      taskRelevance: 0,
+      dependencyRelevance: 0,
+      ownershipRelevance: 0,
+      documentationRelevance: 0,
+    };
+    if (payload.exact) exact.push(payload);
+    else partial.push(payload);
+  }
 
   const symbols = symbolIndex.items || [];
   for (const row of symbols) {

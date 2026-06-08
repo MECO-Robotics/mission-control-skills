@@ -69,3 +69,11 @@ Mission Control now includes `integrations/observability/` as a local-first even
 When present, `observability/prompts/registry.json` is used to resolve prompt IDs and versions for trace metadata.
 
 Secrets are redacted in stored metadata; no prompt/runtime credentials should be intentionally passed into trace payload fields.
+
+## Code Search adapter
+
+Mission Control now includes `integrations/code-search/` for symbol/references/callers/implementation/API retrieval.
+
+- Local fallback indexing extracts symbols and references from repository files.
+- Sourcebot is optional and only used when available; all calls degrade to local search.
+- Repository Intelligence benefits from exact symbol-first behavior via the code-search symbol feed.
