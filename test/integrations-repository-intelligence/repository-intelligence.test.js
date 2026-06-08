@@ -9,6 +9,7 @@ const { createRequire } = require("node:module");
 const requireFromRepo = createRequire(__filename);
 const intelligence = requireFromRepo("../../integrations/repository-intelligence/src/engine.js");
 const graphify = requireFromRepo("../../integrations/graphify/src/engine.js");
+const semantic = requireFromRepo("../../integrations/semantic-retrieval/src/engine.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "mission-intel-"));
@@ -286,6 +287,22 @@ test("ranking is deterministic and sorted by relevance", () => {
     const keys1 = first.results.map((row) => `${row.repository}|${row.file}|${row.score}`);
     const keys2 = second.results.map((row) => `${row.repository}|${row.file}|${row.score}`);
     assert.deepEqual(keys1, keys2);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test("semantic-search integrates optional semantic-retrieval backend mode", () => {
+  const { root, indexRoot } = buildFixtureWorkspace();
+  try {
+    intelligence.buildIndexes({ repositoryRoot: root, indexRoot, profile: "reviewer" });
+    semantic.buildSemanticIndex({
+      repositoryRoot: root,
+      outputDir: path.join(root, "generated-semantic-index"),
+      profile: "reviewer",
+    });
+    const result = intelligence.semanticSearch({ query: "MC-101", repositoryRoot: root, indexRoot, profile: "reviewer" });
+    assert.equal(result.mode.includes("semantic-retrieval"), true);
   } finally {
     cleanup(root);
   }

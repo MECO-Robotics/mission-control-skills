@@ -502,6 +502,8 @@ function buildTaskContext(options) {
   let files = [];
   let intelligenceContext = null;
   let graphContextPath = null;
+  let semanticContextPath = null;
+  const semanticModule = loadSemanticRetrievalModule();
   const staticFindings = collectStaticAnalysisForTask(repositoryRoot, {
     taskId: seedId,
     files: [],
@@ -544,6 +546,23 @@ function buildTaskContext(options) {
       graphContextPath = graphContextResult.graphContextMdPath;
     }
   }
+  if (options.includeSemanticContext !== false && semanticModule && typeof semanticModule.exportSemanticContext === "function") {
+    try {
+      const semanticQuery = [seedId, ...related.map((row) => row.title || row.id)].filter(Boolean).join(" ");
+      const semantic = semanticModule.exportSemanticContext({
+        repositoryRoot,
+        query: semanticQuery || seedId,
+        taskId: seedId,
+        profile: profileName,
+        outputDir: path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context")),
+        indexRoot: path.join(repositoryRoot, "generated-semantic-index"),
+        limit: options.limit || options.maxFiles || 80,
+      });
+      semanticContextPath = semantic.mdPath || null;
+    } catch {
+      semanticContextPath = null;
+    }
+  }
   files.sort((a, b) => a.path.localeCompare(b.path));
   files = files.filter((file, index, arr) => arr.findIndex((row) => row.path === file.path) === index);
   if (options.limit && files.length > options.limit) {
@@ -581,6 +600,12 @@ function buildTaskContext(options) {
     extraSummary.push("## Graph context");
     extraSummary.push(`Graph context summary: ${path.basename(graphContextPath)}`);
     extraSummary.push(`Graph context JSON: ${graphContextResultPath(graphContextPath)}`);
+  }
+  if (semanticContextPath) {
+    extraSummary.push("");
+    extraSummary.push("## Semantic context");
+    extraSummary.push(`Semantic context summary: ${path.basename(semanticContextPath)}`);
+    extraSummary.push("Related semantic context JSON: semantic-context.json");
   }
   writeIfNeeded(mdSummary, `${summary}\n${extraSummary.join("\n")}\n`);
   const depLines = [`# Task Dependencies for ${seedId}`, "", ...relationships.map((edge) => `- ${edge.from} -> ${edge.to} (${edge.type})`)];
@@ -625,6 +650,7 @@ function buildTaskContext(options) {
     file_count: metadata.file_count,
     repomix_used: false,
     graph_context: graphContextPath || null,
+    semantic_context: semanticContextPath || null,
     files: files.map((f) => ({ path: f.path, size: f.size, tokens: f.tokens, sha1: f.sha1, kind: f.kind })),
   };
   writeIfNeeded(path.join(outDir, "token-report.json"), JSON.stringify(tokenReport, null, 2));
@@ -635,6 +661,7 @@ function buildTaskContext(options) {
     mdDeps,
     metadata,
     graphContextPath,
+    semanticContextPath,
   };
 }
 
@@ -731,6 +758,26 @@ function buildPrContext(options) {
       files.push(file);
     }
   }
+  const semanticModule = loadSemanticRetrievalModule();
+  let semanticContextPath = null;
+  if (options.includeSemanticContext !== false && semanticModule && typeof semanticModule.exportSemanticContext === "function") {
+    try {
+      const query = [prId, ...changedFiles].join(" ").trim();
+      const semantic = semanticModule.exportSemanticContext({
+        repositoryRoot,
+        query: query || prId,
+        profile: profile.name,
+        taskId: options.taskId || "",
+        repository: repos[0] || ".",
+        outputDir: path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context")),
+        indexRoot: path.join(repositoryRoot, "generated-semantic-index"),
+        limit: options.limit || options.maxFiles || 80,
+      });
+      semanticContextPath = semantic.mdPath || null;
+    } catch {
+      semanticContextPath = null;
+    }
+  }
   files.sort((a, b) => a.path.localeCompare(b.path));
   const metadata = metadataEnvelope({
     profile: profile.name,
@@ -790,6 +837,12 @@ function buildPrContext(options) {
     neighborhoodLines.push("## Graph neighborhoods");
     neighborhoodLines.push(...graphNeighborhood.lines);
   }
+  if (semanticContextPath) {
+    neighborhoodLines.push("");
+    neighborhoodLines.push("## Semantic context");
+    neighborhoodLines.push(`Semantic context summary: ${path.basename(semanticContextPath)}`);
+    neighborhoodLines.push("Related semantic context JSON: semantic-context.json");
+  }
   writeIfNeeded(mdSummary, `${baseSummary}\n${neighborhoodLines.join("\n")}\n`);
   writeIfNeeded(path.join(outDir, "token-report.json"), JSON.stringify({
     generated_at: metadata.generated_at,
@@ -801,9 +854,10 @@ function buildPrContext(options) {
     file_count: metadata.file_count,
     repomix_used: false,
     graph_neighborhood_files: graphNeighborhood.files.length,
+    semantic_context: semanticContextPath || null,
     files: files.map((f) => ({ path: f.path, size: f.size, tokens: f.tokens, sha1: f.sha1, kind: f.kind })),
   }, null, 2));
-  return { outDir, xmlPath, mdSummary, relatedDecisionsPath, affectedReposPath, metadata };
+  return { outDir, xmlPath, mdSummary, relatedDecisionsPath, affectedReposPath, semanticContextPath, metadata };
 }
 
 function validateContextBudget(options) {
@@ -908,6 +962,18 @@ function loadRepositoryIntelligenceModule() {
 
 function loadGraphifyModule() {
   const candidate = path.resolve(__dirname, "..", "..", "graphify", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function loadSemanticRetrievalModule() {
+  const candidate = path.resolve(__dirname, "..", "..", "semantic-retrieval", "src", "engine.js");
   if (!fs.existsSync(candidate)) {
     return null;
   }

@@ -29,6 +29,18 @@ function loadCodeSearchEngine() {
   }
 }
 
+function loadSemanticRetrievalEngine() {
+  const candidate = path.resolve(__dirname, "..", "..", "semantic-retrieval", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
 function queryGraphBackend(options = {}) {
   const engine = loadGraphifyEngine();
   if (!engine || typeof engine.queryProjectGraph !== "function") {
@@ -835,6 +847,46 @@ function semanticSearch(options = {}) {
   const all = [...(codeIndex.items || []), ...(docsIndex.items || []), ...(findingsIndex.items || [])];
   const qTokens = tokenSet(query);
 
+  const semanticBackend = loadSemanticRetrievalEngine();
+  const backendItems = [];
+  if (semanticBackend && typeof semanticBackend.semanticSearch === "function") {
+    const byKey = new Set();
+    try {
+      const backendResults = semanticBackend.semanticSearch({
+        query,
+        profile: profile.name,
+        repositoryRoot: root,
+        indexRoot: path.join(root, "generated-semantic-index"),
+        limit,
+        repository: options.repository,
+        taskId: options.taskId,
+      }).results || [];
+      for (const row of backendResults) {
+        const key = `${row.source_type}|${row.repository || ""}|${row.path || row.file || ""}|${row.symbol || ""}`;
+        if (byKey.has(key)) continue;
+        byKey.add(key);
+        backendItems.push({
+          score: Math.min(1, parseFloat((row.score || 0) + 0.05)),
+          repository: row.repository || null,
+          file: row.path || row.file || null,
+          symbol: row.symbol || row.id || null,
+          snippet: row.snippet || "",
+          reason: "semantic retrieval backend",
+          query,
+          type: "semantic_retrieval",
+          semanticRelevance: row.score || 0,
+          taskRelevance: row.task_id ? 0.2 : 0,
+          dependencyRelevance: 0,
+          ownershipRelevance: 0,
+          documentationRelevance: row.source_type === "docs" || row.source_type === "decisions" ? row.score || 0 : 0,
+          symbolRelevance: row.source_type === "code_symbols" || row.source_type === "tests" ? row.score || 0 : 0,
+        });
+      }
+    } catch {
+      // optional backend should never fail hard the local retrieval path
+    }
+  }
+
   const results = [];
   for (const item of all) {
     const targetSet = new Set(item.tokenSet || tokenSet(item.content || `${item.title || ""} ${item.snippet || ""}`));
@@ -870,7 +922,21 @@ function semanticSearch(options = {}) {
     if (b.score !== a.score) return b.score - a.score;
     return String(a.file).localeCompare(String(b.file));
   });
-  return { results: results.slice(0, limit), query, profile: profile.name, mode: reason, total: results.length };
+  const merged = [];
+  const seen = new Set();
+  for (const row of [...backendItems, ...results]) {
+    const key = `${row.type}|${row.repository || ""}|${row.file || ""}|${row.symbol || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(row);
+  }
+  return {
+    results: merged.slice(0, limit),
+    query,
+    profile: profile.name,
+    mode: `${reason}${backendItems.length ? "+semantic-retrieval" : ""}`,
+    total: merged.length,
+  };
 }
 
 function symbolSearch(options = {}) {

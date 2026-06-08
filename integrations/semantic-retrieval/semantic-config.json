@@ -1,0 +1,109 @@
+{
+  "version": "1.0.0",
+  "paths": {
+    "indexRoot": "generated-semantic-index",
+    "indexFile": "semantic-index.json",
+    "recordsRoot": "indexes"
+  },
+  "integrationFiles": {
+    "globalIssues": "global-issues.json",
+    "dependencyMap": "dependency-map.json",
+    "decisionLog": "decision-log.json",
+    "architectureWiki": "architecture-wiki.md",
+    "gitWiki": "git-wiki.json",
+    "findingResults": "analysis-results/findings.json",
+    "reviewSummaries": "analysis-results/summary.json",
+    "gitNexus": "git-nexus.json",
+    "repoRegistry": "repo-registry.json"
+  },
+  "indexing": {
+    "skipDirectories": [
+      ".git",
+      ".github",
+      "node_modules",
+      "dist",
+      "build",
+      ".turbo",
+      ".next",
+      "coverage"
+    ],
+    "binaryExtensions": [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".webp",
+      ".pdf",
+      ".zip",
+      ".tar",
+      ".gz",
+      ".mp4",
+      ".mp3",
+      ".woff",
+      ".woff2",
+      ".eot",
+      ".ttf",
+      ".ico",
+      ".exe",
+      ".dll",
+      ".bin",
+      ".db",
+      ".sqlite"
+    ],
+    "codeExtensions": [
+      ".js",
+      ".ts",
+      ".tsx",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".py",
+      ".java",
+      ".go",
+      ".cs",
+      ".cpp",
+      ".c",
+      ".h",
+      ".hpp",
+      ".cc",
+      ".rb",
+      ".php",
+      ".rs",
+      ".kt",
+      ".swift"
+    ],
+    "docExtensions": [
+      ".md",
+      ".rst",
+      ".txt",
+      ".yaml",
+      ".yml",
+      ".toml",
+      ".json"
+    ],
+    "maxFileBytes": 512000
+  },
+  "ranking": {
+    "exactSymbolBoost": 1.0,
+    "taskRelevanceBoost": 0.35,
+    "dependencyRelevanceBoost": 0.2,
+    "documentationDecay": 0.08,
+    "recentDecisionBoost": 0.15,
+    "reviewerFindingBoost": 0.18
+  },
+  "redaction": {
+    "enabled": true,
+    "mask": "[redacted]"
+  },
+  "embeddings": {
+    "provider": "local",
+    "dimension": 64
+  },
+  "qdrant": {
+    "enabled": false,
+    "host": "http://127.0.0.1:6333",
+    "collection": "mission-control-semantic",
+    "apiKeyEnv": "QDRANT_API_KEY",
+    "defaultDistance": "cosine"
+  }
+}

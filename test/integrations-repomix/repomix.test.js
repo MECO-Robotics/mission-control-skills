@@ -9,6 +9,7 @@ const { createRequire } = require("node:module");
 const requireFromRepo = createRequire(__filename);
 const repomix = requireFromRepo("../../integrations/repomix/src/engine.js");
 const graphify = requireFromRepo("../../integrations/graphify/src/engine.js");
+const semantic = requireFromRepo("../../integrations/semantic-retrieval/src/engine.js");
 
 function write(filePath, content) {
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -106,6 +107,37 @@ test("build-task-context can include graph context summaries", () => {
     assert.equal(out.graphContextPath !== null, true);
     const summary = fs.readFileSync(path.join(repo, "generated-context", "task-summary.md"), "utf8");
     assert.equal(summary.includes("Graph context"), true);
+  } finally {
+    cleanupDir(root);
+  }
+});
+
+test("build-task-context can include semantic context summaries", () => {
+  const root = tempDir();
+  try {
+    const repo = path.join(root, "repo");
+    mkdirSync(repo, { recursive: true });
+    write(path.join(repo, "global-issues.json"), JSON.stringify({
+      tasks: [
+        { id: "MC-700", repository: "repo", files: ["src/task.ts"] },
+      ],
+    }));
+    write(path.join(repo, "dependency-map.json"), JSON.stringify({ dependencies: [] }));
+    write(path.join(repo, "repo-registry.json"), JSON.stringify({ repositories: { repo: { path: "." } } }));
+    write(path.join(repo, "src", "task.ts"), "export function task() { return 1; }\n");
+    semantic.buildSemanticIndex({
+      repositoryRoot: repo,
+      outputDir: path.join(repo, "generated-semantic-index"),
+      profile: "coder",
+    });
+    const out = repomix.buildTaskContext({
+      repositoryPath: repo,
+      taskId: "MC-700",
+      outputDir: path.join(repo, "generated-context"),
+      profile: "coder",
+    });
+    assert.equal(typeof out.semanticContextPath, "string");
+    assert.equal(fs.existsSync(out.semanticContextPath), true);
   } finally {
     cleanupDir(root);
   }

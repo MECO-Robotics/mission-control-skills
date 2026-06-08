@@ -47,6 +47,30 @@ Graph outputs are used by:
 - Repomix task/PR context exports,
 - graph summaries for cross-repo planning.
 
+## Semantic Retrieval adapter
+
+Mission Control now includes `integrations/semantic-retrieval/` for optional vector-aware lookup.
+
+- Qdrant is optional and disabled unless explicitly configured.
+- Default behavior is local indexing + local embedding provider, no network calls.
+- Source record families:
+  - code symbols / modules
+  - docs / architecture docs / wiki pages
+  - tasks / decisions
+  - dependency references
+  - static-analysis findings
+  - review summaries
+  - graph summaries
+- Profiles control source filters and top-k:
+  - `architect`
+  - `coder`
+  - `reviewer`
+  - `maintainer`
+- Optional semantic mode used by:
+  - Repository Intelligence `semanticSearch` and `hybridSearch`
+  - Repomix `buildTaskContext` and `buildPrContext` (via `semantic-context.md/json`)
+  - Retrieval comparison and semantic context export tools
+
 ## Observability adapter
 
 Mission Control now includes `integrations/observability/` as a local-first event log for agent workflows.

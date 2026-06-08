@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+const engine = require("../src/engine");
+
+function parse(argv) {
+  const out = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--repository-root") { out.repositoryRoot = argv[i + 1]; i += 1; continue; }
+    if (arg === "--index-root") { out.indexRoot = argv[i + 1]; i += 1; continue; }
+    if (arg === "--index-file") { out.indexFile = argv[i + 1]; i += 1; continue; }
+    if (arg === "--config") { out.configPath = argv[i + 1]; i += 1; continue; }
+  }
+  return out;
+}
+
+const args = parse(process.argv.slice(2));
+const result = engine.validateSemanticIndex({
+  repositoryRoot: args.repositoryRoot || process.cwd(),
+  indexRoot: args.indexRoot,
+  indexFile: args.indexFile,
+  configPath: args.configPath,
+});
+const output = JSON.stringify(result, null, 2);
+console.log(output);
+if (!result.valid) {
+  process.exit(1);
+}
