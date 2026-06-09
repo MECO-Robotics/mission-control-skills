@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+const cli = require("../src/cli");
+
+const result = cli.commandCreateEntry(process.argv.slice(2));
+console.log(`entry_id=${result.entry_id}`);
+console.log(`board_id=${result.board.board_id}`);
+console.log(`entry_type=${result.entry.entry_type}`);
+console.log(`status=${result.entry.status}`);

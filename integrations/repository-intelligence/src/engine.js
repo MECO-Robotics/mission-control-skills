@@ -41,6 +41,18 @@ function loadSemanticRetrievalEngine() {
   }
 }
 
+function loadBlackboardEngine() {
+  const candidate = path.resolve(__dirname, "..", "..", "blackboard", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
 function queryGraphBackend(options = {}) {
   const engine = loadGraphifyEngine();
   if (!engine || typeof engine.queryProjectGraph !== "function") {
@@ -55,6 +67,27 @@ function queryGraphBackend(options = {}) {
       repository: options.repository,
       taskId: options.taskId,
       limit: options.limit,
+    }).results || [];
+  } catch {
+    return [];
+  }
+}
+
+function queryBlackboardBackend(options = {}) {
+  const engine = loadBlackboardEngine();
+  if (!engine || typeof engine.searchBoards !== "function") {
+    return [];
+  }
+  try {
+    return engine.searchBoards(options.repositoryRoot || process.cwd(), {
+      query: options.query || "",
+      boardType: options.boardType,
+      entryType: options.entryType,
+      task: options.taskId,
+      symbol: options.symbol,
+      findingId: options.findingId,
+      limit: options.limit,
+      repositoryRoot: options.repositoryRoot || process.cwd(),
     }).results || [];
   } catch {
     return [];
@@ -1288,6 +1321,32 @@ function graphRowsToHybrid(graphRows, profile, query) {
     .filter((row) => row.score > 0);
 }
 
+function boardRowsToHybrid(rows, profile, query) {
+  const token = String(query || "").toLowerCase();
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const taskMatch = Array.isArray(row.related_tasks) && row.related_tasks.some((task) => token.includes(task.toLowerCase()));
+      const firstTask = Array.isArray(row.related_tasks) && row.related_tasks.length > 0 ? row.related_tasks[0] : null;
+      return {
+        score: row.score || 0.5,
+        repository: row.board_repository || null,
+        file: Array.isArray(row.related_files) ? row.related_files[0] : null,
+        symbol: row.summary || row.entry_type,
+        query: token,
+        taskId: firstTask || null,
+        taskRelevance: taskMatch ? 0.7 : 0,
+        dependencyRelevance: 0,
+        ownershipRelevance: 0.1,
+        semanticRelevance: token ? Math.min(0.6, 0.1 + 0.02 * token.length) : 0,
+        symbolRelevance: ["function", "class", "interface", "symbol", "finding", "plan", "decision"].includes(row.entry_type) ? 0.4 : 0.2,
+        documentationRelevance: row.entry_type === "decision" ? 0.5 : 0,
+        type: "blackboard",
+        reason: `blackboard ${row.entry_type}`,
+      };
+    })
+    .filter((row) => row.taskId || row.file || row.score > 0);
+}
+
 function mergeByFile(results) {
   const byKey = new Map();
   for (const item of results) {
@@ -1345,12 +1404,21 @@ function hybridSearch(options = {}) {
     profile: profileName,
     limit: Math.max(5, Math.ceil(limit / 2)),
   }).map((row) => toHybridResult(row, query, profile));
+  const blackboardRows = queryBlackboardBackend({
+    repositoryRoot: root,
+    query,
+    limit: Math.max(5, Math.ceil(limit / 2)),
+    profile: profileName,
+  }).map((row) => boardRowsToHybrid([row], profile, query)[0]).filter(Boolean);
 
   const combined = [];
   for (const row of [...semantic, ...symbol, ...tasks, ...deps, ...arch]) {
     combined.push(toHybridResult(row, query, profile));
   }
   for (const row of graphRows) {
+    combined.push(toHybridResult(row, query, profile));
+  }
+  for (const row of blackboardRows) {
     combined.push(toHybridResult(row, query, profile));
   }
 
@@ -1387,12 +1455,19 @@ function find_context_for_task(options = {}) {
   const depMatches = dependencySearch({ repositoryRoot: root, query: taskId, limit: Math.max(5, Math.ceil(limit / 3)) });
   const semanticMatches = semanticSearch({ repositoryRoot: root, query: taskId, limit: Math.max(5, Math.ceil(limit / 2)) });
   const archMatches = architectureSearch({ repositoryRoot: root, query: taskId, limit: Math.max(5, Math.ceil(limit / 2)) });
+  const boardMatches = queryBlackboardBackend({
+    repositoryRoot: root,
+    query: taskId,
+    taskId,
+    limit: Math.max(6, Math.ceil(limit / 2)),
+  }).map((row) => row);
 
   const ranked = rankCombined([
     ...taskMatches.results,
     ...depMatches.results,
     ...semanticMatches.results,
     ...archMatches.results,
+    ...boardRowsToHybrid(boardMatches, profile, taskId),
   ].map((row) => toHybridResult(row, taskId, profile)));
 
   const files = [];
