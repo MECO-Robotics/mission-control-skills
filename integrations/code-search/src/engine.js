@@ -588,8 +588,7 @@ function indexRepositories(options = {}) {
   const repos = findRepos(repositoryRoot);
   const repoPayloads = [];
   for (const repo of repos) {
-    const repoAbs = path.resolve(repositoryRoot, repo.path || ".");
-    const metadata = collectIndexMetadata(repoAbs, cfg, [{ ...repo, path: path.relative(repositoryRoot, repoAbs).replace(/\\/g, "/") }]);
+    const metadata = collectIndexMetadata(repositoryRoot, cfg, [{ ...repo, path: repo.path || "." }]);
     repoPayloads.push({
       repo,
       ...metadata,
@@ -925,8 +924,10 @@ function searchCrossRepository(options = {}) {
   const apiRows = Array.isArray(index.apiUsages) ? index.apiUsages : [];
   const merged = [];
   for (const row of symbolRows) {
-    const score = overlap(qTokens, tokenSet(`${row.symbol} ${row.kind} ${row.file}`)) + 0.1;
-    if (score > 0.1) merged.push({
+    const haystack = `${row.symbol} ${row.kind} ${row.file}`.toLowerCase();
+    const score = overlap(qTokens, tokenSet(haystack));
+    if (score > 0 || haystack.includes(qLower)) {
+      merged.push({
       repository: row.repository,
       file: row.file,
       symbol: row.symbol,
@@ -936,10 +937,12 @@ function searchCrossRepository(options = {}) {
       line: row.line,
       query,
     });
+    }
   }
   for (const row of apiRows) {
-    const score = overlap(qTokens, tokenSet(`${row.symbol} ${row.kind}`));
-    if (score > 0.1) {
+    const haystack = `${row.symbol} ${row.kind}`.toLowerCase();
+    const score = overlap(qTokens, tokenSet(haystack));
+    if (score > 0 || haystack.includes(qLower)) {
       merged.push({
         repository: row.repository,
         file: row.file,
@@ -953,8 +956,9 @@ function searchCrossRepository(options = {}) {
     }
   }
   for (const row of fileRows) {
-    const score = overlap(qTokens, tokenSet(`${row.file} ${row.path || ""}`));
-    if (score > 0.1 && qLower.includes(".") === false) {
+    const haystack = `${row.file} ${row.path || ""}`.toLowerCase();
+    const score = overlap(qTokens, tokenSet(haystack));
+    if ((score > 0 || haystack.includes(qLower)) && qLower.includes(".") === false) {
       merged.push({
         repository: row.repository,
         file: row.file,
@@ -1031,8 +1035,8 @@ function validateSearchState(options = {}) {
     failures: [],
     counts: {},
   };
-  const indexPath = path.resolve(options.outputDir || path.join(process.cwd(), cfg.defaults.indexDir || DEFAULT_INDEX_DIR), options.indexFile || DEFAULT_INDEX_FILE);
   const repositoryRoot = path.resolve(options.repositoryRoot || process.cwd());
+  const indexPath = path.resolve(options.outputDir || path.join(repositoryRoot, cfg.defaults.indexDir || DEFAULT_INDEX_DIR), options.indexFile || DEFAULT_INDEX_FILE);
   result.indexPath = indexPath;
   const payload = readIndex(indexPath);
   if (!payload) {

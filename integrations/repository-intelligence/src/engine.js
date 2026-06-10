@@ -99,7 +99,8 @@ function readJson(filePath) {
     return null;
   }
   const raw = fs.readFileSync(filePath, "utf8");
-  return JSON.parse(raw);
+  const normalized = String(raw).replace(/^\uFEFF/, "").trimStart();
+  return JSON.parse(normalized);
 }
 
 function writeJson(filePath, value) {
@@ -352,6 +353,7 @@ function collectSourceEntries(repositoryRoot, filters = {}) {
     if (!fs.existsSync(repoAbs)) {
       continue;
     }
+    const repoPath = String(repo.path || "").replace(/\\/g, "/");
     const files = walkFiles(repoAbs, { excludeDirectories: [...excludeDirectories, ".gitignore"] });
     for (const fileAbs of files) {
       const rel = path.relative(repoAbs, fileAbs).split(path.sep).join("/");
@@ -367,7 +369,7 @@ function collectSourceEntries(repositoryRoot, filters = {}) {
         repositoryPath: repo.path,
         repositoryOwner: repo.owner || null,
         absolutePath: fileAbs,
-        relativePath: `${repo.path.replace(/\\//g, "/")}/${rel}`.replace(/^\.\/|^\//, ""),
+        relativePath: `${repoPath}/${rel}`.replace(/^\.\/|^\//, ""),
         fileName: path.basename(fileAbs),
         extension: path.extname(fileAbs).toLowerCase(),
         kind: classifyFile(fileAbs),
@@ -872,8 +874,9 @@ function semanticSearch(options = {}) {
   const root = path.resolve(options.repositoryRoot || process.cwd());
   const profile = normalizeProfile((loadProfiles()[options.profile] || loadProfiles().coder || {}));
   const config = loadSearchConfig();
-  const useVector = options.preferVector && config.search?.semantic?.enabled && config.search.semantic.enabled !== false;
-  const reason = useVector ? "embedding-disabled" : "keyword-fallback";
+  const semanticBackend = loadSemanticRetrievalEngine();
+  const useVector = options.preferVector && Boolean(config.search?.semantic?.enabled) && typeof semanticBackend?.semanticSearch === "function";
+  const reason = useVector ? "semantic-retrieval" : "keyword-fallback";
   const codeIndex = loadCodeIndex(root, options.indexRoot || INDEX_ROOT);
   const docsIndex = loadDocsIndex(root, options.indexRoot || INDEX_ROOT);
   const findingsIndex = loadFindingsIndex(root, options.indexRoot || INDEX_ROOT);
@@ -1556,6 +1559,35 @@ function find_context_for_task(options = {}) {
       }
     }
   }
+  const globalIssues = readJson(path.join(root, "global-issues.json"));
+  const taskLookup = (Array.isArray(globalIssues?.tasks) ? globalIssues.tasks : [])
+    .find((row) => String(row?.id || "").toUpperCase() === taskId);
+  const taskFiles = new Set(
+    (Array.isArray(taskLookup?.files) ? taskLookup.files : []).map((row) =>
+      String(row || "")
+        .replace(/\\/g, "/")
+        .replace(/^\.\//, "")
+        .toLowerCase(),
+    ),
+  );
+  const indexedFindings = loadFindingsIndex(root, options.indexRoot || INDEX_ROOT);
+  if (taskFiles.size > 0 && Array.isArray(indexedFindings.items)) {
+    for (const row of indexedFindings.items) {
+      const normFile = String(row.file || "").replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+      if (!normFile || !taskFiles.has(normFile)) {
+        continue;
+      }
+      findings.push({
+        id: row.id || row.rule || row.symbol || `${row.repository || "global"}:${normFile}`,
+        repository: row.repository || null,
+        file: row.file || "",
+        severity: row.severity || "info",
+        symbol: row.symbol || "",
+        score: row.score || 0,
+        reason: row.reason || "task-related finding",
+      });
+    }
+  }
 
   const uniqueFiles = [];
   const seen = new Set();
@@ -1576,7 +1608,7 @@ function find_context_for_task(options = {}) {
     findings,
     relatedTasks: taskMatches.results.map((row) => row.taskId).filter(Boolean),
     repositoryCount: repositories.size,
-    query,
+    query: taskId,
   };
 }
 
@@ -1708,32 +1740,28 @@ function validateIndex(options = {}) {
   }
 
   const indexes = [
-    loadCodeIndex(options.repositoryRoot || process.cwd(), indexRoot),
-    loadDocsIndex(options.repositoryRoot || process.cwd(), indexRoot),
-    loadTasksIndex(options.repositoryRoot || process.cwd(), indexRoot),
-    loadDependencyIndex(options.repositoryRoot || process.cwd(), indexRoot),
-    loadFindingsIndex(options.repositoryRoot || process.cwd(), indexRoot),
-    loadSymbolIndex(options.repositoryRoot || process.cwd(), indexRoot),
+    { kind: "code", items: loadCodeIndex(options.repositoryRoot || process.cwd(), indexRoot).items || [] },
+    { kind: "docs", items: loadDocsIndex(options.repositoryRoot || process.cwd(), indexRoot).items || [] },
+    { kind: "tasks", items: loadTasksIndex(options.repositoryRoot || process.cwd(), indexRoot).items || [] },
+    { kind: "dependencies", items: loadDependencyIndex(options.repositoryRoot || process.cwd(), indexRoot).items || [] },
+    { kind: "findings", items: loadFindingsIndex(options.repositoryRoot || process.cwd(), indexRoot).items || [] },
+    { kind: "symbols", items: loadSymbolIndex(options.repositoryRoot || process.cwd(), indexRoot).items || [] },
   ];
-  const pathCounts = [
-    { kind: "code", count: (loadCodeIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
-    { kind: "docs", count: (loadDocsIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
-    { kind: "tasks", count: (loadTasksIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
-    { kind: "dependencies", count: (loadDependencyIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
-    { kind: "findings", count: (loadFindingsIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
-    { kind: "symbols", count: (loadSymbolIndex(options.repositoryRoot || process.cwd(), indexRoot).items || []).length },
-  ];
+  const pathCounts = indexes.map((row) => ({ kind: row.kind, count: row.items.length }));
 
-  const seenPaths = new Set();
+  const seenPathsByKind = new Map();
   for (const idx of indexes) {
+    const scope = idx.kind || "generic";
+    const seenPaths = seenPathsByKind.get(scope) || new Set();
     for (const row of idx.items || []) {
       if (row.path) {
         if (seenPaths.has(row.path)) {
-          failures.push(`duplicate path in index: ${row.path}`);
+          failures.push(`duplicate path in ${scope} index: ${row.path}`);
         }
         seenPaths.add(row.path);
       }
     }
+    seenPathsByKind.set(scope, seenPaths);
   }
 
   if (manifest.generatedAt == null) {

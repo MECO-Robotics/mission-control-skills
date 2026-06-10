@@ -632,7 +632,7 @@ function collectAllRecords(root, cfg) {
 
 function loadEmbeddingProvider(cfg) {
   const name = cfg.embeddings?.provider || "local";
-  const providerPath = path.join(__dirname, "providers", "embeddings", `${name}.js`);
+  const providerPath = path.join(__dirname, "..", "providers", "embeddings", `${name}.js`);
   try {
     const providerModule = fs.existsSync(providerPath) ? require(providerPath) : null;
     if (providerModule && typeof providerModule.createProvider === "function") {
@@ -641,7 +641,7 @@ function loadEmbeddingProvider(cfg) {
   } catch {
     // ignore and fall back
   }
-  return require(path.join(__dirname, "providers", "embeddings", "local.js")).createProvider(cfg.embeddings);
+  return require(path.join(__dirname, "..", "providers", "embeddings", "local.js")).createProvider(cfg.embeddings);
 }
 
 function loadQdrantProvider(cfg) {
@@ -761,7 +761,12 @@ function updateSemanticIndex(options = {}) {
       recordCount: (current.records || []).length,
     };
   }
-  const build = buildSemanticIndex({ ...options, outputRoot, indexFile: fileName, repositoryRoot });
+  const build = buildSemanticIndex({
+    ...options,
+    outputDir: outputRoot,
+    indexFile: fileName,
+    repositoryRoot,
+  });
   return { ...build, unchanged: false };
 }
 
@@ -862,7 +867,36 @@ function toHybridResult(row, profileName) {
 
 function resolveCodeSearch(query, options = {}) {
   const engine = loadCodeSearch();
-  if (!engine || typeof engine.searchSymbol !== "function") return [];
+  const normalizedQuery = String(query || "").trim();
+  const isExactQuery = normalizedQuery.length > 0;
+  if (!engine || typeof engine.searchSymbol !== "function") {
+    try {
+      const repositoryRoot = path.resolve(options.repositoryRoot || process.cwd());
+      const cfg = loadConfig(options.configPath || DEFAULT_CONFIG_PATH);
+      const indexRoot = path.resolve(options.indexRoot || options.outputDir || path.join(repositoryRoot, cfg.paths.indexRoot));
+      const indexFile = options.indexFile || cfg.paths.indexFile || DEFAULT_INDEX_FILE;
+      const index = loadIndex(indexRoot, indexFile);
+      const qLower = normalizedQuery.toLowerCase();
+      return (Array.isArray(index.records) ? index.records : [])
+        .filter((row) => row.source_type === "code_symbols" && String(row.symbol || "").toLowerCase() === qLower)
+        .slice(0, options.limit || 20)
+        .map((row) => ({
+          id: stableId("symbols", row.repository || "", row.path || "", row.symbol || "", qLower),
+          score: Number(row.score || 0.98),
+          source_type: "code_symbols",
+          repository: row.repository,
+          path: row.path,
+          symbol: row.symbol,
+          task_id: row.task_id || "",
+          snippet: row.text || "",
+          reason: "exact symbol match from local fallback index",
+          source: "code-search",
+          query,
+        }));
+    } catch {
+      return [];
+    }
+  }
   try {
     const rows = engine.searchSymbol({ repositoryRoot: options.repositoryRoot, symbolName: query, limit: options.limit || 20, preferSourcebot: true, repository: options.repository }).results || [];
     return rows.map((row) => ({
@@ -980,7 +1014,14 @@ function hybridSemanticSearch(options = {}) {
     limit: Math.max(5, Math.ceil(limit / 2)),
   }).results.map((row) => ({ ...row, query }));
 
-  const code = resolveCodeSearch(query, { repositoryRoot, repository: options.repository, limit: Math.max(3, Math.ceil(limit / 3)) });
+  const code = resolveCodeSearch(query, {
+    repositoryRoot,
+    repository: options.repository,
+    limit: Math.max(3, Math.ceil(limit / 3)),
+    indexRoot: idx,
+    configPath: options.configPath || DEFAULT_CONFIG_PATH,
+    indexFile: options.indexFile,
+  });
   const graph = resolveGraphMatches(query, { repositoryRoot, repository: options.repository, profile: profile.name, taskId: options.taskId, limit: Math.max(3, Math.ceil(limit / 3)) });
   const dep = resolveDependencyAndNexus(query, cfg, repositoryRoot, { profile: profile.name });
 
@@ -1159,3 +1200,4 @@ module.exports = {
   compareRetrievalModes,
   redactSecrets,
 };
+

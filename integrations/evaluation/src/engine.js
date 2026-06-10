@@ -454,10 +454,10 @@ function evaluateReviewer(context, reviewFile = null) {
   }
   const findingCount = findings.length || 1;
   const quality = clamp01((matched / findingCount) * 0.7 + Math.min(0.3, context.files["analysis-results/review-findings.md"] ? 0.3 : 0));
-  const falsePositiveRate = byRule.size ? clamp01(1 - Math.min(1, matched / byRule.size)) : 0;
+  const falsePositiveRate = byRule.size ? clamp01(Math.max(0, 1 - Math.min(1, matched / byRule.size))) : 0;
   const metrics = {
     finding_quality: quality,
-    false_positive_rate: clamp01(1 - falsePositiveRate),
+    false_positive_rate: falsePositiveRate,
     severity_accuracy: clamp01(0.5 + 0.1 * Number(Boolean(context.files["analysis-results/findings.json"])) + (bySeverity.critical ? 0.2 : 0)),
     missed_issue_rate: clamp01(1 - quality),
   };
@@ -540,15 +540,17 @@ function evaluateWorkflow(context) {
 }
 
 function scoreFromProfile(metrics, profileCfg) {
+  const penaltyMetrics = new Set(["missing_context_penalty", "false_positive_rate", "missed_issue_rate"]);
   const normalized = {};
   const weights = profileCfg.weights || {};
   let weighted = 0;
   let weightSum = 0;
   for (const [key, raw] of Object.entries(metrics)) {
     const value = clamp01(raw);
-    normalized[key] = value;
+    const effective = penaltyMetrics.has(key) ? 1 - value : value;
+    normalized[key] = effective;
     const weight = Number(weights[key] || 1);
-    weighted += value * weight;
+    weighted += effective * weight;
     weightSum += Math.max(0, weight);
   }
   if (weightSum === 0) {
@@ -706,6 +708,7 @@ function runEvaluation(argv = []) {
   writeText(path.join(outputDir, "results.md"), `${markdown}\n`);
   return {
     ...evaluation,
+    profile,
     outputDir,
     resultPath: resultFile,
     mdPath: path.join(outputDir, "results.md"),
@@ -856,7 +859,10 @@ function validateAgentRegression(argv = []) {
   const currentPath = path.resolve(args.current || args._positional0);
   const currentPayload = normalizeEvaluationPayload(readJson(currentPath));
   const currentSuite = String(currentPayload?.[0]?.suite || "architect");
-  const defaultBaseline = path.join(path.dirname(currentPath), "baselines", `${currentSuite}.json`);
+  const currentDir = path.dirname(currentPath);
+  const guessedBaseline = path.resolve(currentDir, "baselines", `${currentSuite}.json`);
+  const baselineSibling = path.resolve(path.dirname(currentDir), "baselines", `${currentSuite}.json`);
+  const defaultBaseline = fs.existsSync(guessedBaseline) ? guessedBaseline : baselineSibling;
   const basePath = path.resolve(args.baseline || args.baselineFile || defaultBaseline);
   const config = loadConfig(args.configPath);
   const current = currentPayload[0];
@@ -998,7 +1004,7 @@ function evaluateReviewQuality(argv = []) {
   const missedRate = clamp01(1 - findingQuality);
   const metrics = {
     finding_quality: findingQuality,
-    false_positive_rate: clamp01(1 - falsePositives),
+    false_positive_rate: falsePositives,
     severity_accuracy: severityAccuracy,
     missed_issue_rate: missedRate,
   };

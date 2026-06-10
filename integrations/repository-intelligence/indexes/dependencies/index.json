@@ -1,0 +1,21 @@
+{
+  "repositoryRoot": "C:\\Users\\happy\\AppData\\Local\\Temp\\repomix-2EwGVF\\repo",
+  "profile": "coder",
+  "generatedAt": "2026-06-09T20:18:57.684Z",
+  "items": [
+    {
+      "from": "MC-900",
+      "to": "MC-901",
+      "type": "nexus_dependency",
+      "repository": null,
+      "tokenSet": [
+        "mc",
+        "900",
+        "901",
+        "nexus_dependency",
+        "nexus",
+        "dependency"
+      ]
+    }
+  ]
+}

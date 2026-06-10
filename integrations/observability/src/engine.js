@@ -73,7 +73,9 @@ function makeTraceId(seed) {
 function readJson(filePath) {
   if (!fs.existsSync(filePath)) return null;
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    const raw = fs.readFileSync(filePath, "utf8");
+    const normalized = String(raw).replace(/^\uFEFF/, "").trimStart();
+    return JSON.parse(normalized);
   } catch {
     return null;
   }

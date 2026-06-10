@@ -310,7 +310,16 @@ function makeNodeId(type, ...parts) {
 }
 
 function addNode(nodesById, payload) {
-  const id = payload.id || makeNodeId(payload.node_type, payload.repository || "", payload.file || "", payload.symbol || payload.task_id || payload.title || "item");
+  let id = payload.id;
+  if (!id) {
+    if (payload.node_type === "repository") {
+      id = `repository:${makeSafeToken(payload.repository || payload.id || "item")}`;
+    } else if (payload.node_type === "task") {
+      id = `task:${makeSafeToken(payload.task_id || payload.title || "item")}`;
+    } else {
+      id = makeNodeId(payload.node_type, payload.repository || "", payload.file || "", payload.symbol || payload.title || "item");
+    }
+  }
   if (!nodesById.has(id)) {
     nodesById.set(id, {
       id,
@@ -1007,7 +1016,12 @@ function buildTaskGraph(options = {}) {
   });
   const graph = loadGraph(baseGraph.graphPath || baseGraph.outputPath || path.join(outputDir, DEFAULT_GRAPH_FILE));
 
-  const targetId = `task:${taskId}`;
+  const targetIds = new Set([`task:${taskId}`]);
+  for (const node of graph.nodes) {
+    if (node?.node_type === "task" && String(node.task_id || "").toUpperCase() === taskId) {
+      targetIds.add(node.id);
+    }
+  }
   const adjacency = new Map();
   for (const edge of graph.edges) {
     if (!adjacency.has(edge.from)) adjacency.set(edge.from, []);
@@ -1018,7 +1032,7 @@ function buildTaskGraph(options = {}) {
 
   const includedNodes = new Set();
   const includedEdges = [];
-  const queue = [{ nodeId: targetId, depth: 0 }];
+  const queue = [...targetIds].map((nodeId) => ({ nodeId, depth: 0 }));
   const maxDepth = Number.isInteger(options.depth) ? options.depth : 2;
 
   while (queue.length > 0) {
@@ -1026,9 +1040,6 @@ function buildTaskGraph(options = {}) {
     if (!nodeId || includedNodes.has(nodeId) || depth > maxDepth) continue;
     const node = graph.nodes.find((row) => row.id === nodeId);
     if (!node) {
-      if (nodeId === targetId) {
-        break;
-      }
       continue;
     }
     includedNodes.add(nodeId);
@@ -1042,7 +1053,8 @@ function buildTaskGraph(options = {}) {
     }
   }
 
-  if (!includedNodes.has(targetId)) {
+  if (![...includedNodes].some((id) => targetIds.has(id))) {
+    const targetId = `task:${taskId}`;
     includedNodes.add(targetId);
     graph.nodes.push({
       id: targetId,
@@ -1580,7 +1592,8 @@ function validateGraph(options = {}) {
     }
   }
   for (const node of graph.nodes) {
-    if (node.repository && !repoNodes.has(`repository:${node.repository}`) && node.node_type !== "repository" && node.node_type !== "file") {
+    const repositoryKnown = node.repository === "." || repoNodes.has(`repository:${node.repository}`);
+    if (node.repository && !repositoryKnown && node.node_type !== "repository" && node.node_type !== "file") {
       failures.push(`unknown repository for node: ${node.id}`);
     }
   }

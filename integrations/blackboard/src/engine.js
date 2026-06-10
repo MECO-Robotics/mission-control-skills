@@ -210,7 +210,6 @@ function collectBoardEntries(repositoryRoot, options = {}) {
   for (const board of boards) {
     const entries = materializeLatestEntries(board.entries || []);
     for (const entry of entries) {
-      if (entry.id === "meta") continue;
       out.push({
         board_id: board.board_id,
         board_type: board.board_type,
@@ -451,13 +450,14 @@ function searchBoards(repositoryRoot, options = {}) {
   const rows = [];
 
   for (const entry of boardEntries) {
+    const isMeta = entry.id === "meta";
     if (boardType && entry.board_type !== boardType) continue;
     if (entryType && entry.entry_type !== entryType) continue;
     if (statusFilterActive && entry.status !== status) continue;
-    if (taskId && !entry.related_tasks.includes(taskId) && !entry.board_id.includes(taskId)) continue;
+    if (taskId && !isMeta && !entry.related_tasks.includes(taskId) && !entry.board_id.includes(taskId)) continue;
     if (symbol && !entry.related_symbols.includes(symbol)) continue;
     if (findingId && !entry.related_findings.includes(findingId)) continue;
-    if (query && !matchQuery(entry, query)) continue;
+    if (query && !isMeta && !matchQuery(entry, query)) continue;
 
     const matched = materializeLatestEntries([entry]);
     if (!matched.length) continue;

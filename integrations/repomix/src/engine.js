@@ -135,6 +135,59 @@ function readJson(filePath) {
   return JSON.parse(raw);
 }
 
+function loadRepoRegistry(root) {
+  const payload = readJson(path.join(root, "repo-registry.json"));
+  const repos = payload?.repositories || {};
+  const out = [];
+  if (Array.isArray(repos)) {
+    for (const row of repos) {
+      out.push({
+        id: String(row?.id || row?.name || row?.path || row || "repo"),
+        path: String(row?.path || row?.id || row?.name || "."),
+      });
+    }
+    return out;
+  }
+  for (const [id, row] of Object.entries(repos)) {
+    out.push({
+      id,
+      path: String(row?.path || id),
+    });
+  }
+  if (out.length === 0) {
+    out.push({ id: ".", path: "." });
+  }
+  return out;
+}
+
+function buildRepoPathMap(root) {
+  const repoMap = new Map();
+  for (const row of loadRepoRegistry(root)) {
+    repoMap.set(
+      row.id,
+      String(row.path || ".").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "") || ".",
+    );
+  }
+  repoMap.set(".", ".");
+  return repoMap;
+}
+
+function resolveRepositoryPath(root, repositoryId, repoMap) {
+  if (!repositoryId || repositoryId === ".") {
+    return ".";
+  }
+  const direct = repoMap.get(repositoryId);
+  if (direct) {
+    return direct;
+  }
+  const lower = String(repositoryId).toLowerCase();
+  for (const [id, repositoryPath] of repoMap.entries()) {
+    if (String(id).toLowerCase() === lower) return repositoryPath;
+    if (repositoryPath && String(repositoryPath).toLowerCase() === lower) return repositoryPath;
+  }
+  return ".";
+}
+
 function readTextSafe(filePath) {
   if (isBinaryPath(filePath)) {
     return null;
@@ -422,6 +475,17 @@ function writeTokenReport(filePath, metadata, files, profile, repomixUsed) {
   };
   writeIfNeeded(filePath, JSON.stringify(summary, null, 2));
   return summary;
+}
+
+function resolveTokenReportPath(contextPath) {
+  const directory = path.dirname(contextPath);
+  const standardPath = path.join(directory, "token-report.json");
+  if (fs.existsSync(standardPath)) {
+    return standardPath;
+  }
+  const xmlJson = contextPath.replace(/\.xml$/i, ".json").replace(/\.md$/i, ".json");
+  if (fs.existsSync(xmlJson)) return xmlJson;
+  return standardPath;
 }
 
 function buildRepoContext(options) {
@@ -832,10 +896,16 @@ function buildPrContext(options) {
   writeIfNeeded(affectedReposPath, `${repoLines.join("\n")}\n`);
   const baseSummary = summarizeFiles(files, xmlPath, `PR-${prId} Diff Summary`);
   const neighborhoodLines = [];
-  if (graphNeighborhood.lines.length > 0) {
+  if (graphNeighborhood.lines.length > 0 || graphNeighborhood.files.length > 0) {
     neighborhoodLines.push("");
     neighborhoodLines.push("## Graph neighborhoods");
-    neighborhoodLines.push(...graphNeighborhood.lines);
+    if (graphNeighborhood.lines.length > 0) {
+      neighborhoodLines.push(...graphNeighborhood.lines);
+    } else {
+      for (const row of graphNeighborhood.files) {
+        neighborhoodLines.push(`- ${row.path}`);
+      }
+    }
   }
   if (semanticContextPath) {
     neighborhoodLines.push("");
@@ -865,7 +935,7 @@ function validateContextBudget(options) {
   const profileName = options.profile || "coder";
   const profiles = loadProfiles(options.profilePath || DEFAULT_PROFILES_PATH);
   const profile = profiles[profileName] || profiles.coder;
-  const reportPath = target.replace(/\.xml$/i, ".json").replace(/\.md$/i, ".json");
+  const reportPath = resolveTokenReportPath(target);
   const directReport = readJson(reportPath);
   const report = directReport || {
     profile: profileName,
@@ -909,7 +979,7 @@ function validateContextBudget(options) {
 
 function summarizeContext(options) {
   const xml = path.resolve(options.contextFile || path.join(options.repositoryPath || process.cwd(), "generated-context", "repo-context.xml"));
-  const reportPath = xml.replace(/\.xml$/i, ".json").replace(/\.md$/i, ".json");
+  const reportPath = resolveTokenReportPath(xml);
   const report = readJson(reportPath) || {
     generated_at: new Date().toISOString(),
     repositories: [],
@@ -1097,6 +1167,7 @@ function collectPrGraphNeighborhood(options) {
   const graphPath = path.resolve(options.graphPath || path.join(repositoryRoot, "generated-graphs", "project-graph.json"));
   const profileName = options.profileName || "reviewer";
   const profile = normalizeProfile(loadProfiles()[profileName] || loadProfiles().coder || {});
+  const repositoryPathMap = buildRepoPathMap(repositoryRoot);
   if (!fs.existsSync(graphPath) && typeof graphify.buildProjectGraph === "function") {
     graphify.buildProjectGraph({
       repositoryRoot,
@@ -1121,14 +1192,16 @@ function collectPrGraphNeighborhood(options) {
     };
   }
   const nodesById = new Map(graph.nodes.map((row) => [row.id, row]));
+  const graphFileNodes = graph.nodes.filter((row) => ["file", "test", "document"].includes(row.node_type));
   const filePaths = new Map();
   const addPath = (repo, candidate) => {
     if (!candidate || typeof candidate !== "string") {
       return;
     }
     const normalized = candidate.replace(/\\/g, "/").replace(/^\/+/, "");
+    const resolvedRepo = resolveRepositoryPath(repositoryRoot, repo, repositoryPathMap);
     if (!filePaths.has(normalized)) {
-      filePaths.set(normalized, repo || ".");
+      filePaths.set(normalized, resolvedRepo);
     }
   };
   for (const result of queryGraph.results || []) {
@@ -1140,6 +1213,23 @@ function collectPrGraphNeighborhood(options) {
       if (!target) continue;
       if (target.file) {
         addPath(target.repository || result.repository || "", target.file);
+      }
+    }
+  }
+  const changedFiles = Array.isArray(options.changedFiles) ? options.changedFiles : [];
+  if (changedFiles.length > 0) {
+    for (const changed of changedFiles) {
+      const candidate = String(changed || "").replace(/\\/g, "/").replace(/^\/+/, "");
+      if (!candidate) continue;
+      const lower = candidate.toLowerCase();
+      const directMatch = graphFileNodes.find((row) => String(row.file || "").toLowerCase() === lower);
+      if (directMatch) {
+        addPath(directMatch.repository || options.repositoryRoot || ".", directMatch.file);
+        continue;
+      }
+      const suffixMatch = graphFileNodes.find((row) => String(row.file || "").toLowerCase().endsWith(`/${lower}`) || String(row.file || "").toLowerCase() === lower);
+      if (suffixMatch) {
+        addPath(suffixMatch.repository || options.repositoryRoot || ".", suffixMatch.file);
       }
     }
   }

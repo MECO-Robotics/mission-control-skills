@@ -11,7 +11,7 @@ const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"];
 
 function readJson(filePath) {
   if (!fs.existsSync(filePath)) return null;
-  const raw = fs.readFileSync(filePath, "utf8");
+  const raw = String(fs.readFileSync(filePath, "utf8")).replace(/^\uFEFF/, "");
   return JSON.parse(raw);
 }
 
@@ -50,7 +50,7 @@ function normalizeSeverity(raw, config, source = "") {
 
 function stableFindingId(finding) {
   const source = String(finding.source || "").toLowerCase();
-  const repository = String(finding.repository || "");
+  const repository = normalizeFindingFingerprint(finding).split("#")[0] || "";
   const file = String(finding.file || "");
   const line = Number(finding.line || 0);
   const rule = String(finding.rule || "");
@@ -63,7 +63,7 @@ function stableFindingId(finding) {
     rule,
     message,
   ]
-    .map((value) => value.replace(/[\n\r]/g, " ").trim())
+    .map((value) => String(value).replace(/[\n\r]/g, " ").trim())
     .filter(Boolean)
     .join("|");
 }
@@ -104,7 +104,54 @@ function normalizeFinding(raw, source, sourceRepo) {
 
 function normalizePath(value) {
   if (!value) return "";
-  return String(value).replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  return String(value).replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").replace(/^\.\//g, "");
+}
+
+function normalizeFindingFingerprint(finding) {
+  const repository = normalizePath(finding.repository || ".");
+  const file = normalizePath(finding.file || "");
+  const line = Number(finding.line || 0);
+  const rule = String(finding.rule || "").trim();
+  const message = String(finding.message || "").trim();
+  return `${repository}#${file}#${line}#${rule}#${message}`;
+}
+
+function normalizeFingerprint(value) {
+  if (!value || typeof value !== "string") return "";
+  const raw = String(value);
+  const parts = raw.split("#");
+  if (parts.length === 4) {
+    const file = normalizePath(parts[0]);
+    const line = Number(parts[1]);
+    const rule = String(parts[2] || "").trim();
+    const message = String(parts[3] || "").trim();
+    if (Number.isFinite(line)) {
+      return `.#${file}#${line}#${rule}#${message}`;
+    }
+    return `.#${file}#0#${rule}#${message}`;
+  }
+  if (parts.length < 5) return String(value);
+  const first = normalizePath(parts[0]);
+  const second = parts[1];
+  const third = parts[2];
+  const fourth = parts[3];
+  const message = parts.slice(4).join("#");
+
+  if (/^\d+$/.test(second) && (first.includes("/") || first.includes(".") || first.includes("\\"))) {
+    return normalizeFindingFingerprint({
+      repository: ".",
+      file: first,
+      line: second,
+      rule: fourth,
+      message,
+    });
+  }
+
+  const repository = normalizePath(first);
+  const file = normalizePath(second);
+  const line = Number(third);
+  if (Number.isNaN(line) || line < 0) return `${repository}#${second}#${third}#${fourth}#${message}`;
+  return `${repository}#${file}#${line}#${fourth}#${message}`;
 }
 
 function normalizeProfile(raw = {}) {
@@ -262,7 +309,7 @@ function ensureBaselineFile(baselinePath) {
 
 function baselineFingerprint(findings) {
   return findings
-    .map((row) => `${row.repository}#${row.file}#${row.line}#${row.rule}#${row.message}`)
+    .map((row) => normalizeFindingFingerprint(row))
     .sort();
 }
 
@@ -280,9 +327,9 @@ function loadBaseline(repositoryRoot, profileName, config) {
       : Array.isArray(baseline.findings)
         ? baseline.findings
             .map((finding) => {
-              if (typeof finding === "string") return finding;
+              if (typeof finding === "string") return normalizeFingerprint(finding);
               if (!finding || typeof finding !== "object") return null;
-              return `${finding.repository}#${finding.file}#${finding.line}#${finding.rule}#${finding.message}`;
+              return normalizeFindingFingerprint(finding);
             })
             .filter(Boolean)
         : [];
@@ -407,7 +454,7 @@ function runAnalysis(options = {}) {
   const historical = [];
   const newAgainstBaseline = [];
   for (const finding of findings) {
-    const fingerprint = `${finding.repository}#${finding.file}#${finding.line}#${finding.rule}#${finding.message}`;
+    const fingerprint = normalizeFindingFingerprint(finding);
     if (baselineSet.has(fingerprint)) {
       historical.push(finding.id);
     } else {
@@ -646,8 +693,9 @@ function validateMergeReadiness(options = {}) {
 
   const allFindings = Array.isArray(payload.findings) ? payload.findings : [];
   const prContext = loadPrContext(path.dirname(findingPath), options.pr, allFindings);
+  const repositoryRoot = path.resolve(options.repositoryRoot || path.dirname(findingPath));
 
-  const baseline = loadBaseline(path.dirname(findingPath), profileName, config);
+  const baseline = loadBaseline(repositoryRoot, profileName, config);
   const blocked = allFindings
     .filter((row) => isBlocking(row, profile.block, baseline.fingerprints))
     .filter((row) => !prContext || prContext.files.length === 0 || prContext.files.includes(row.file));
@@ -767,9 +815,14 @@ function severityRank(value) {
 
 function isBlocking(finding, policy, baselineSet = new Set()) {
   const normalizedSeverity = SEVERITY_ORDER.includes(finding.severity) ? finding.severity : "info";
-  const fingerprint = `${finding.repository}#${finding.file}#${finding.line}#${finding.rule}#${finding.message}`;
+  const fingerprint = normalizeFindingFingerprint(finding);
   if (baselineSet.has(fingerprint)) {
     return false;
+  }
+  for (const entry of baselineSet) {
+    if (normalizeFingerprint(entry) === normalizeFindingFingerprint(finding)) {
+      return false;
+    }
   }
   return policy[normalizedSeverity] === true;
 }

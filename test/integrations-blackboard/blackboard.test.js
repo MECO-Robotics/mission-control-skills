@@ -58,16 +58,21 @@ test("create-entry validates input and rejects duplicates", () => {
     });
 
     assert.equal(first.entry.board_id, "mc-234");
-    const duplicateError = assert.throws(() => blackboard.createEntry("MC-234", {
-      entry_type: "finding",
-      summary: "Auth middleware uses raw headers",
-      details: "duplicate payload",
-      id: first.entry.id,
-    }, {
-      repositoryRoot: root,
-      boardType: "task-board",
-      actor: "coder",
-    }));
+    let duplicateError = null;
+    try {
+      blackboard.createEntry("MC-234", {
+        entry_type: "finding",
+        summary: "Auth middleware uses raw headers",
+        details: "duplicate payload",
+        id: first.entry.id,
+      }, {
+        repositoryRoot: root,
+        boardType: "task-board",
+        actor: "coder",
+      });
+    } catch (error) {
+      duplicateError = error;
+    }
     assert.equal(duplicateError instanceof Error, true);
   } finally {
     cleanup(root);
