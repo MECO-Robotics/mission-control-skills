@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-06-08T12:00:00.000Z",
+  "query": "authentication middleware",
+  "profile": "coder",
+  "repository": "",
+  "task_id": "MC-101",
+  "results": [
+    {
+      "id": "auth-1",
+      "score": 0.91,
+      "source_type": "code_symbols",
+      "repository": "repo-a",
+      "path": "src/auth.ts",
+      "symbol": "authenticationMiddleware",
+      "task_id": "MC-101",
+      "snippet": "export function authenticationMiddleware(req, res, next) { ... }",
+      "reason": "semantic similarity",
+      "source": "semantic-retrieval"
+    }
+  ]
+}

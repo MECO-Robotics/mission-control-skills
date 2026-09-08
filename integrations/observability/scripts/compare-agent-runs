@@ -1,0 +1,6 @@
+﻿#!/usr/bin/env node
+const cli = require("../src/cli");
+const result = cli.commandCompareAgentRuns(process.argv.slice(2));
+console.log(`baseline=${result.baseline_id}`);
+console.log(`current=${result.current_id}`);
+console.log(`score_delta=${result.evaluation_diff.delta}`);

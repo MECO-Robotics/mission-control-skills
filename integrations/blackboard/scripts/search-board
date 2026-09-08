@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+const cli = require("../src/cli");
+
+const result = cli.commandSearchBoard(process.argv.slice(2));
+console.log(`total=${result.total}`);
+console.log(`query=${result.query}`);
+for (const row of result.results) {
+  console.log(`- ${row.board_id}:${row.id}\t${row.entry_type}\t${row.status}\t${row.summary}`);
+}

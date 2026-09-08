@@ -1,0 +1,24 @@
+{
+  "profiles": {
+    "architect": {
+      "name": "architect",
+      "prioritize": ["repository", "module", "dependency", "decision", "wiki_page"],
+      "max_neighbors": 3
+    },
+    "coder": {
+      "name": "coder",
+      "prioritize": ["file", "symbol", "function", "class", "test"],
+      "max_neighbors": 5
+    },
+    "reviewer": {
+      "name": "reviewer",
+      "prioritize": ["file", "test", "pull_request", "dependency", "decision"],
+      "max_neighbors": 5
+    },
+    "maintainer": {
+      "name": "maintainer",
+      "prioritize": ["repository", "task", "dependency", "pull_request", "decision"],
+      "max_neighbors": 4
+    }
+  }
+}

@@ -1,0 +1,33 @@
+#!/usr/bin/env node
+const engine = require("../src/engine");
+
+function parse(argv) {
+  const out = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--symbol" || arg === "--query") {
+      out.symbolName = argv[i + 1];
+      i += 1;
+    } else if (arg === "--limit") {
+      out.limit = argv[i + 1];
+      i += 1;
+    } else if (arg === "--repo" || arg === "--repository-root") {
+      out.repositoryRoot = argv[i + 1];
+      i += 1;
+    } else if (!out.symbolName) {
+      out.symbolName = arg;
+    }
+  }
+  return out;
+}
+
+const args = parse(process.argv.slice(2));
+if (!args.symbolName) {
+  throw new Error("symbol-search requires a symbol name.");
+}
+const result = engine.symbolSearch({
+  symbolName: args.symbolName,
+  limit: args.limit,
+  repositoryRoot: args.repositoryRoot,
+});
+console.log(JSON.stringify(result, null, 2));

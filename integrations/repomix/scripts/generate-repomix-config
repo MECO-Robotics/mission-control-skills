@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+const cli = require("../src/cli");
+const result = cli.commandGenerateConfig(process.argv.slice(2));
+console.log(`config=${result.configPath}`);
+

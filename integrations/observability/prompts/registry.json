@@ -1,0 +1,40 @@
+﻿{
+  "prompts": [
+    {
+      "id": "architect-agent-v1",
+      "role": "architect",
+      "path": "prompts/architect.md",
+      "version": "1.0.0",
+      "status": "active",
+      "last_evaluated": "",
+      "score": 0
+    },
+    {
+      "id": "coder-agent-v1",
+      "role": "coder",
+      "path": "prompts/coder.md",
+      "version": "1.0.0",
+      "status": "active",
+      "last_evaluated": "",
+      "score": 0
+    },
+    {
+      "id": "reviewer-agent-v1",
+      "role": "reviewer",
+      "path": "prompts/reviewer.md",
+      "version": "1.0.0",
+      "status": "active",
+      "last_evaluated": "",
+      "score": 0
+    },
+    {
+      "id": "maintainer-agent-v1",
+      "role": "maintainer",
+      "path": "prompts/maintainer.md",
+      "version": "1.0.0",
+      "status": "active",
+      "last_evaluated": "",
+      "score": 0
+    }
+  ]
+}

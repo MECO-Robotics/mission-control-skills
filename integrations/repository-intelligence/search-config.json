@@ -1,0 +1,91 @@
+﻿{
+  "version": "1.0.0",
+  "index": {
+    "codeExtensions": [
+      ".js",
+      ".ts",
+      ".tsx",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".py",
+      ".java",
+      ".go",
+      ".cs",
+      ".cpp",
+      ".h",
+      ".hpp",
+      ".cc",
+      ".c",
+      ".rb",
+      ".php",
+      ".rs",
+      ".kt",
+      ".swift"
+    ],
+    "docSuffixes": [
+      ".md",
+      ".rst",
+      ".txt",
+      ".yaml",
+      ".yml",
+      ".json",
+      ".toml"
+    ],
+    "excludeDirectories": [
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      ".next",
+      "out",
+      ".turbo"
+    ],
+    "codeIgnorePatterns": [
+      "*.min.*",
+      "*.map"
+    ]
+  },
+  "search": {
+    "maxResults": 25,
+    "snippetWindow": 4,
+    "semantic": {
+      "enabled": false,
+      "provider": "qdrant",
+      "collection": "repository-intelligence",
+      "embeddingModel": "local-bm25"
+    },
+    "symbol": {
+      "maxResults": 40
+    },
+    "task": {
+      "maxResults": 40
+    },
+    "dependency": {
+      "maxResults": 40
+    },
+    "architecture": {
+      "maxResults": 40
+    }
+  },
+  "ranking": {
+    "weights": {
+      "taskRelevance": 1.0,
+      "dependencyRelevance": 0.8,
+      "repositoryOwnershipRelevance": 0.6,
+      "semanticRelevance": 0.6,
+      "symbolRelevance": 0.55,
+      "documentationRelevance": 0.45
+    },
+    "fallbackToKeyword": true
+  },
+  "sources": {
+    "dependencyMap": "dependency-map.json",
+    "repoRegistry": "repo-registry.json",
+    "globalIssues": "global-issues.json",
+    "decisionLog": "decision-log.json",
+    "architectureWiki": "architecture-wiki.md",
+    "gitNexus": "git-nexus.json",
+    "gitWiki": "git-wiki.json"
+  }
+}

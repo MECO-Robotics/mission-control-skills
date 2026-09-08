@@ -1,0 +1,35 @@
+#!/usr/bin/env node
+const engine = require("../src/engine");
+
+function parse(argv) {
+  const out = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--query") { out.query = argv[i + 1]; i += 1; continue; }
+    if (arg === "--profile") { out.profile = argv[i + 1]; i += 1; continue; }
+    if (arg === "--limit") { out.limit = argv[i + 1]; i += 1; continue; }
+    if (arg === "--repository") { out.repository = argv[i + 1]; i += 1; continue; }
+    if (arg === "--task-id") { out.taskId = argv[i + 1]; i += 1; continue; }
+    if (arg === "--repository-root") { out.repositoryRoot = argv[i + 1]; i += 1; continue; }
+    if (arg === "--index-root") { out.indexRoot = argv[i + 1]; i += 1; continue; }
+    if (arg === "--output-dir") { out.outputDir = argv[i + 1]; i += 1; continue; }
+    if (arg === "--config") { out.configPath = argv[i + 1]; i += 1; continue; }
+    if (!out.query) out.query = arg;
+  }
+  return out;
+}
+
+const args = parse(process.argv.slice(2));
+if (!args.query) throw new Error("compare-retrieval-modes requires --query");
+const result = engine.compareRetrievalModes({
+  query: args.query,
+  profile: args.profile || "coder",
+  repository: args.repository,
+  taskId: args.taskId,
+  repositoryRoot: args.repositoryRoot || process.cwd(),
+  indexRoot: args.indexRoot,
+  limit: args.limit,
+  outputDir: args.outputDir,
+  configPath: args.configPath,
+});
+console.log(JSON.stringify(result, null, 2));

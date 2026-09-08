@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-01-01T00:00:00.000Z",
+  "suite": "architect",
+  "version": 1,
+  "thresholds": {
+    "pass_score": 72
+  },
+  "score": 80,
+  "max_score": 100,
+  "pass": true,
+  "metrics": {
+    "decomposition_quality": 80,
+    "dependency_identification": 70,
+    "repository_ownership_accuracy": 85,
+    "task_planning_quality": 77
+  }
+}

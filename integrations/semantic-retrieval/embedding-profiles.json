@@ -1,0 +1,20 @@
+{
+  "profiles": {
+    "architect": {
+      "sources": ["docs", "decisions", "tasks", "dependencies", "graph_summaries"],
+      "top_k": 12
+    },
+    "coder": {
+      "sources": ["code_symbols", "docs", "tests", "tasks"],
+      "top_k": 16
+    },
+    "reviewer": {
+      "sources": ["code_symbols", "findings", "reviews", "tasks", "decisions"],
+      "top_k": 16
+    },
+    "maintainer": {
+      "sources": ["tasks", "decisions", "reviews", "dependencies", "findings"],
+      "top_k": 12
+    }
+  }
+}

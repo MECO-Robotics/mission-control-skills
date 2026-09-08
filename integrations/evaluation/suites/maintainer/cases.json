@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "id": "maint-001",
+      "query": "Check merge readiness and dependency impact",
+      "type": "text",
+      "requiredArtifacts": ["dependency-map.json", "analysis-results/summary.json", "analysis-results/findings.json"]
+    },
+    {
+      "id": "maint-002",
+      "query": "Assess release-readiness documentation",
+      "type": "text",
+      "requiredArtifacts": ["release-notes.md", "global-issues.json"]
+    }
+  ]
+}

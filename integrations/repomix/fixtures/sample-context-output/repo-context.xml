@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<repoContext>
+  <metadata>
+    <generated_at>2026-01-01T00:00:00.000Z</generated_at>
+    <profile>coder</profile>
+    <estimated_tokens>128</estimated_tokens>
+    <file_count>2</file_count>
+    <repositories>meco-mission-control-platform</repositories>
+    <tasks></tasks>
+    <dependencies></dependencies>
+  </metadata>
+  <files>
+    <file path="src/server.ts" size="64" tokens="16" kind="code" sha1="4f9d"></file>
+    <file path="README.md" size="12" tokens="3" kind="doc" sha1="c17a"></file>
+  </files>
+</repoContext>
+

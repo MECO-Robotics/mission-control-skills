@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+const engine = require("../src/engine");
+
+function parse(argv) {
+  const out = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--repo" || arg === "--repository-root") {
+      out.repositoryRoot = argv[i + 1];
+      i += 1;
+    } else if (arg === "--profile") {
+      out.profile = argv[i + 1];
+      i += 1;
+    } else if (!out._positional0) {
+      out._positional0 = arg;
+    }
+  }
+  if (!out.repositoryRoot && out._positional0) {
+    out.repositoryRoot = out._positional0;
+  }
+  return out;
+}
+
+const args = parse(process.argv.slice(2));
+const result = engine.updateIndexes({ repositoryRoot: args.repositoryRoot, profile: args.profile, indexRoot: args.indexRoot });
+console.log(JSON.stringify(result, null, 2));

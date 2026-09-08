@@ -1,0 +1,1301 @@
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+const childProcess = require("child_process");
+
+const DEFAULT_PROFILES_PATH = path.join(__dirname, "..", "context-profiles.json");
+const DEFAULT_TEMPLATE_PATH = path.join(__dirname, "..", "repomix-config.template.json");
+const STATIC_ANALYSIS_RESULTS_PATH = "analysis-results/findings.json";
+
+function normalizeProfile(raw) {
+  return {
+    name: raw.name ?? "custom",
+    tokenBudget: raw.tokenBudget ?? 12000,
+    outputFormat: raw.outputFormat ?? "xml",
+    includeDirectories: Array.isArray(raw.includeDirectories) ? raw.includeDirectories : [],
+    includeFiles: Array.isArray(raw.includeFiles) ? raw.includeFiles : [],
+    excludeDirectories: Array.isArray(raw.excludeDirectories) ? raw.excludeDirectories : [],
+    includeDocumentation: raw.includeDocumentation !== false,
+    includeTests: raw.includeTests !== false,
+    maxDocumentationFileTokens: raw.maxDocumentationFileTokens ?? 12000,
+    documentationSuffixes: Array.isArray(raw.documentationSuffixes)
+      ? raw.documentationSuffixes
+      : [".md", ".txt", ".rst", ".yaml", ".yml", ".json"],
+  };
+}
+
+function loadProfiles(profilePath = DEFAULT_PROFILES_PATH) {
+  const abs = path.resolve(profilePath);
+  const raw = fs.readFileSync(abs, "utf8");
+  const parsed = JSON.parse(raw);
+  const out = {};
+  for (const [name, profile] of Object.entries(parsed.profiles ?? {})) {
+    out[name] = normalizeProfile(profile);
+  }
+  return out;
+}
+
+function estimateTokens(content) {
+  return Math.max(1, Math.ceil((content?.length ?? 0) / 4));
+}
+
+function sha1(content) {
+  return crypto.createHash("sha1").update(content).digest("hex");
+}
+
+function isBinaryPath(p) {
+  const ext = path.extname(p).toLowerCase();
+  const binaryExts = new Set([
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".pdf",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".mp4",
+    ".mp3",
+    ".woff",
+    ".woff2",
+    ".eot",
+    ".ttf",
+    ".ico",
+    ".exe",
+    ".dll",
+    ".bin",
+    ".db",
+    ".sqlite",
+  ]);
+  return binaryExts.has(ext);
+}
+
+function isTestPath(rel) {
+  const normalized = rel.replace(/\\/g, "/");
+  if (normalized.includes("/test/")) {
+    return true;
+  }
+  return /\.(test|spec)\.[^.]+$/.test(path.basename(normalized));
+}
+
+function isDocPath(rel, suffixes) {
+  const lower = rel.toLowerCase();
+  return suffixes.some((sfx) => lower.endsWith(sfx));
+}
+
+function normalizeSegments(root, target) {
+  const rootParts = path.resolve(root).split(path.sep).filter(Boolean);
+  const targetParts = path.resolve(target).split(path.sep).filter(Boolean);
+  let i = 0;
+  while (i < rootParts.length && i < targetParts.length && rootParts[i] === targetParts[i]) {
+    i += 1;
+  }
+  const relativeParts = targetParts.slice(i);
+  return relativeParts.join(path.sep);
+}
+
+function shouldIncludeByPattern(relPath, profile) {
+  const normalized = relPath.replace(/\\/g, "/");
+  if (profile.includeDirectories.length === 0 && profile.includeFiles.length === 0) {
+    return true;
+  }
+  if (profile.includeFiles.some((name) => normalized === name || normalized.endsWith(`/${name}`))) {
+    return true;
+  }
+  return profile.includeDirectories.some((dir) => {
+    const lower = dir.toLowerCase();
+    const relLower = normalized.toLowerCase();
+    return relLower === lower || relLower.startsWith(`${lower}/`);
+  });
+}
+
+function shouldIncludeFile(relPath, profile) {
+  const normalized = relPath.replace(/\\/g, "/");
+  if (profile.excludeDirectories.some((dir) => normalized === dir || normalized.startsWith(`${dir.replace(/\\/g, "/")}/`))) {
+    return false;
+  }
+  if (!shouldIncludeByPattern(normalized, profile)) {
+    return false;
+  }
+  if (!profile.includeTests && isTestPath(normalized)) {
+    return false;
+  }
+  if (!profile.includeDocumentation && isDocPath(normalized, profile.documentationSuffixes)) {
+    return false;
+  }
+  return true;
+}
+
+function readJson(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  const raw = fs.readFileSync(filePath, "utf8");
+  return JSON.parse(raw);
+}
+
+function loadRepoRegistry(root) {
+  const payload = readJson(path.join(root, "repo-registry.json"));
+  const repos = payload?.repositories || {};
+  const out = [];
+  if (Array.isArray(repos)) {
+    for (const row of repos) {
+      out.push({
+        id: String(row?.id || row?.name || row?.path || row || "repo"),
+        path: String(row?.path || row?.id || row?.name || "."),
+      });
+    }
+    return out;
+  }
+  for (const [id, row] of Object.entries(repos)) {
+    out.push({
+      id,
+      path: String(row?.path || id),
+    });
+  }
+  if (out.length === 0) {
+    out.push({ id: ".", path: "." });
+  }
+  return out;
+}
+
+function buildRepoPathMap(root) {
+  const repoMap = new Map();
+  for (const row of loadRepoRegistry(root)) {
+    repoMap.set(
+      row.id,
+      String(row.path || ".").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "") || ".",
+    );
+  }
+  repoMap.set(".", ".");
+  return repoMap;
+}
+
+function resolveRepositoryPath(root, repositoryId, repoMap) {
+  if (!repositoryId || repositoryId === ".") {
+    return ".";
+  }
+  const direct = repoMap.get(repositoryId);
+  if (direct) {
+    return direct;
+  }
+  const lower = String(repositoryId).toLowerCase();
+  for (const [id, repositoryPath] of repoMap.entries()) {
+    if (String(id).toLowerCase() === lower) return repositoryPath;
+    if (repositoryPath && String(repositoryPath).toLowerCase() === lower) return repositoryPath;
+  }
+  return ".";
+}
+
+function readTextSafe(filePath) {
+  if (isBinaryPath(filePath)) {
+    return null;
+  }
+  const content = fs.readFileSync(filePath, "utf8");
+  if (content.includes("\u0000")) {
+    return null;
+  }
+  return content;
+}
+
+function walkFiles(rootAbs, profile) {
+  const files = [];
+  const stack = [{ abs: rootAbs, rel: "" }];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    const children = fs.readdirSync(current.abs, { withFileTypes: true });
+    for (const child of children) {
+      if (child.name === ".git" || child.name === "node_modules") {
+        continue;
+      }
+      const childAbs = path.join(current.abs, child.name);
+      const childRel = current.rel ? path.join(current.rel, child.name) : child.name;
+      const relPosix = childRel.replace(/\\/g, "/");
+      if (child.isDirectory()) {
+        if (profile.excludeDirectories.some((dir) => relPosix === dir || relPosix.startsWith(`${dir}/`))) {
+          continue;
+        }
+        stack.push({ abs: childAbs, rel: childRel });
+        continue;
+      }
+      if (!child.isFile()) {
+        continue;
+      }
+      if (!shouldIncludeFile(childRel, profile)) {
+        continue;
+      }
+      const stat = fs.statSync(childAbs);
+      const content = readTextSafe(childAbs);
+      const item = {
+        path: childRel,
+        abs: childAbs,
+        size: stat.size,
+        content: content ?? "",
+        kind: isDocPath(relPosix, profile.documentationSuffixes) ? "doc" : "code",
+      };
+      item.tokens = estimateTokens(item.content || "");
+      item.sha1 = sha1(item.content || "");
+      files.push(item);
+    }
+  }
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  return files;
+}
+
+function metadataEnvelope({
+  profile,
+  repositories,
+  tasks,
+  dependencies,
+  files,
+  staticFindings = [],
+}) {
+  const estimatedTokens = files.reduce((sum, f) => sum + f.tokens, 0);
+  return {
+    generated_at: new Date().toISOString(),
+    profile,
+    repositories: [...repositories],
+    tasks: [...tasks],
+    dependencies: [...dependencies],
+    static_findings: [...staticFindings],
+    estimated_tokens: estimatedTokens,
+    file_count: files.length,
+  };
+}
+
+function xmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function generateRepoXml({ metadata, files }) {
+  const lines = [];
+  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  lines.push("<repoContext>");
+  lines.push("  <metadata>");
+  lines.push(`    <generated_at>${xmlEscape(metadata.generated_at)}</generated_at>`);
+  lines.push(`    <profile>${xmlEscape(metadata.profile)}</profile>`);
+  lines.push(`    <estimated_tokens>${metadata.estimated_tokens}</estimated_tokens>`);
+  lines.push(`    <file_count>${metadata.file_count}</file_count>`);
+  lines.push(`    <repositories>${metadata.repositories.map(xmlEscape).join(",")}</repositories>`);
+  lines.push(`    <tasks>${metadata.tasks.map(xmlEscape).join(",")}</tasks>`);
+  lines.push(`    <dependencies>${metadata.dependencies.map(xmlEscape).join(",")}</dependencies>`);
+  lines.push("  </metadata>");
+  lines.push("  <files>");
+  for (const file of files) {
+    lines.push(
+      `    <file path="${xmlEscape(file.path)}" size="${file.size}" tokens="${file.tokens}" kind="${xmlEscape(file.kind)}" sha1="${xmlEscape(file.sha1)}"><![CDATA[${file.content}]]></file>`,
+    );
+  }
+  lines.push("  </files>");
+  lines.push("</repoContext>");
+  return lines.join("\n");
+}
+
+function summarizeFiles(files, outputPath, title) {
+  let body = `# ${title}\n\n`;
+  const totalTokens = files.reduce((sum, file) => sum + file.tokens, 0);
+  body += `Estimated tokens: ${totalTokens}\n`;
+  body += `Files included: ${files.length}\n\n`;
+  body += `## Files\n\n`;
+  for (const file of files) {
+    body += `- ${file.path} (${file.tokens} tokens)\n`;
+  }
+  body += `\nGenerated context file: ${outputPath}\n`;
+  return body;
+}
+
+function parseTaskRecords(globalIssuesPath) {
+  const data = readJson(globalIssuesPath) ?? {};
+  const source = Array.isArray(data.tasks) ? data.tasks : [];
+  const map = new Map();
+  for (const task of source) {
+    if (typeof task?.id === "string") {
+      map.set(task.id.toUpperCase(), task);
+    }
+  }
+  return map;
+}
+
+function parseDependencyMap(dependencyMapPath) {
+  const data = readJson(dependencyMapPath) ?? {};
+  const rows = Array.isArray(data.dependencies) ? data.dependencies : [];
+  const outgoing = new Map();
+  for (const row of rows) {
+    const from = String(row.from || "").toUpperCase();
+    const to = String(row.to || "").toUpperCase();
+    if (!from || !to) continue;
+    if (!outgoing.has(from)) {
+      outgoing.set(from, []);
+    }
+    outgoing.get(from).push({ to, type: row.type || "related" });
+  }
+  return outgoing;
+}
+
+function collectTaskClosure(startId, taskMap, dependencyMap, depth, seen = new Set(), relationships = []) {
+  const id = startId.toUpperCase();
+  if (seen.has(id) || depth < 0) {
+    return;
+  }
+  if (!taskMap.has(id)) {
+    return;
+  }
+  seen.add(id);
+  const outgoing = dependencyMap.get(id) ?? [];
+  for (const edge of outgoing) {
+    relationships.push({ from: id, to: edge.to, type: edge.type });
+    collectTaskClosure(edge.to, taskMap, dependencyMap, depth - 1, seen, relationships);
+  }
+}
+
+function collectRepoPaths(taskEntries, repositoryRoot, repoRegistryPath) {
+  const registry = readJson(repoRegistryPath);
+  const byId = registry && typeof registry === "object" ? registry.repositories || registry : {};
+  const mapped = new Set();
+  for (const task of taskEntries) {
+    const repoId = task.repository || task.repo;
+    if (typeof repoId === "string") {
+      const repoPath = byId?.[repoId]?.path || repoId;
+      mapped.add(path.resolve(repositoryRoot, repoPath));
+      continue;
+    }
+    if (Array.isArray(task.repositories)) {
+      for (const idOrPath of task.repositories) {
+        mapped.add(path.resolve(repositoryRoot, byId?.[idOrPath]?.path || idOrPath));
+      }
+    }
+  }
+  return [...mapped];
+}
+
+function loadNexusMetadata(baseDir, taskId, prId) {
+  const candidates = [];
+  if (taskId) candidates.push(path.join(baseDir, "git-nexus.json"));
+  if (prId) candidates.push(path.join(baseDir, "git-nexus-prs.json"));
+  for (const file of candidates) {
+    const data = readJson(file);
+    if (!data) continue;
+    if (taskId && data.tasks && Array.isArray(data.tasks)) {
+      return data;
+    }
+    if (prId && data.prs && Array.isArray(data.prs)) {
+      return data;
+    }
+  }
+  return null;
+}
+
+function loadWikiMetadata(baseDir, taskId) {
+  const file = path.join(baseDir, "git-wiki.json");
+  const data = readJson(file);
+  if (!data) {
+    return null;
+  }
+  if (!taskId) {
+    return data;
+  }
+  const matched = [];
+  if (Array.isArray(data.decisions)) {
+    for (const row of data.decisions) {
+      if (String(row.taskId || "").toUpperCase() === taskId.toUpperCase()) {
+        matched.push(row);
+      }
+    }
+  }
+  return { ...data, decisions: matched };
+}
+
+function writeIfNeeded(filePath, content) {
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, content, "utf8");
+}
+
+function commandExists(command) {
+  const checker = process.platform === "win32" ? "where" : "which";
+  const check = childProcess.spawnSync(checker, [command], { encoding: "utf8" });
+  return check.status === 0;
+}
+
+function runRepomixOptional(opts) {
+  const bin = opts.repomixBinary || process.env.REPOMIX_BIN || "repomix";
+  if (!commandExists(bin)) {
+    return { used: false };
+  }
+  const attempts = [];
+  const base = [];
+  if (opts.configPath) {
+    base.push("--config", opts.configPath);
+    base.push("-c", opts.configPath);
+  }
+  base.push(opts.repositoryPath);
+  base.push("--output", opts.outputPath);
+  if (base.length > 0) {
+    attempts.push(base);
+  }
+  attempts.push([opts.repositoryPath, opts.outputPath]);
+  for (const attempt of attempts) {
+    const run = childProcess.spawnSync(bin, attempt, {
+      cwd: opts.repositoryPath,
+      encoding: "utf8",
+    });
+    if (run.status !== 0) {
+      continue;
+    }
+    if (fs.existsSync(opts.outputPath)) {
+      return { used: true, outputPath: opts.outputPath, command: `${bin} ${attempt.join(" ")}` };
+    }
+  }
+  return { used: false, reason: "repomix output not found" };
+}
+
+function writeTokenReport(filePath, metadata, files, profile, repomixUsed) {
+  const summary = {
+    generated_at: metadata.generated_at,
+    profile: profile,
+    repositories: metadata.repositories,
+    tasks: metadata.tasks,
+    dependencies: metadata.dependencies,
+    estimated_tokens: metadata.estimated_tokens,
+    file_count: metadata.file_count,
+    repomix_used: repomixUsed,
+    files: files.map((file) => ({
+      path: file.path,
+      size: file.size,
+      tokens: file.tokens,
+      sha1: file.sha1,
+      kind: file.kind,
+    })),
+  };
+  writeIfNeeded(filePath, JSON.stringify(summary, null, 2));
+  return summary;
+}
+
+function resolveTokenReportPath(contextPath) {
+  const directory = path.dirname(contextPath);
+  const standardPath = path.join(directory, "token-report.json");
+  if (fs.existsSync(standardPath)) {
+    return standardPath;
+  }
+  const xmlJson = contextPath.replace(/\.xml$/i, ".json").replace(/\.md$/i, ".json");
+  if (fs.existsSync(xmlJson)) return xmlJson;
+  return standardPath;
+}
+
+function buildRepoContext(options) {
+  const profileName = options.profile || "coder";
+  const profiles = loadProfiles(options.profilePath || DEFAULT_PROFILES_PATH);
+  const profile = profiles[profileName];
+  if (!profile) {
+    throw new Error(`Unknown profile '${profileName}'.`);
+  }
+  const repositoryPath = path.resolve(options.repositoryPath || process.cwd());
+  const outDir = path.resolve(options.outputDir || path.join(repositoryPath, "generated-context"));
+  const files = walkFiles(repositoryPath, profile);
+  const metadata = metadataEnvelope({
+    profile: profileName,
+    repositories: [normalizeSegments(process.cwd(), repositoryPath)],
+    tasks: [],
+    dependencies: [],
+    files,
+  });
+  const configPath = path.join(repositoryPath, "repomix.config.json");
+  generateRepomixConfigFile({
+    profile,
+    repositoryPath,
+    outputPath: options.outputFile || path.join(outDir, "repo-context.xml"),
+    templatePath: options.templatePath || DEFAULT_TEMPLATE_PATH,
+    configPath,
+  });
+  const repomixResult = options.preferRepomix ? runRepomixOptional({
+    repositoryPath,
+    configPath,
+    outputPath: path.join(outDir, "repo-context.xml"),
+    repomixBinary: options.repomixBinary,
+  }) : { used: false };
+  const xmlPath = path.join(outDir, "repo-context.xml");
+  const mdPath = path.join(outDir, "repo-summary.md");
+  const tokenPath = path.join(outDir, "token-report.json");
+  const xml = repomixResult.used
+    ? fs.readFileSync(repomixResult.outputPath, "utf8")
+    : generateRepoXml({ metadata, files });
+  writeIfNeeded(xmlPath, xml);
+  writeIfNeeded(mdPath, summarizeFiles(files, xmlPath, "Repository Context Summary"));
+  const tokenReport = writeTokenReport(tokenPath, metadata, files, profileName, repomixResult.used);
+  return {
+    repositoryPath,
+    profile: profileName,
+    outDir,
+    files,
+    metadata,
+    tokenReport,
+    repomixUsed: repomixResult.used,
+  };
+}
+
+function buildTaskContext(options) {
+  const repositoryRoot = path.resolve(options.repositoryPath || process.cwd());
+  const profiles = loadProfiles(options.profilePath || DEFAULT_PROFILES_PATH);
+  const profileName = options.profile || "coder";
+  const profile = profiles[profileName];
+  if (!profile) {
+    throw new Error(`Unknown profile '${profileName}'.`);
+  }
+  const taskMap = parseTaskRecords(path.join(repositoryRoot, "global-issues.json"));
+  const dependencyMap = parseDependencyMap(path.join(repositoryRoot, "dependency-map.json"));
+  const nexus = loadNexusMetadata(repositoryRoot, options.taskId, null) || {};
+  const wiki = loadWikiMetadata(repositoryRoot, options.taskId) || {};
+  const seedId = String(options.taskId || "").toUpperCase();
+  const relationships = [];
+  const related = [];
+  collectTaskClosure(seedId, taskMap, dependencyMap, options.dependencyDepth ?? 10, new Set(), relationships);
+  for (const id of new Set([seedId, ...relationships.map((edge) => edge.to)])) {
+    const task = taskMap.get(id);
+    if (task) {
+      related.push(task);
+    }
+  }
+  const repoPaths = collectRepoPaths(related, repositoryRoot, path.join(repositoryRoot, "repo-registry.json"));
+  const selectedTask = taskMap.get(seedId);
+  const selectedRepos = collectRepoPaths(selectedTask ? [selectedTask] : [], repositoryRoot,
+    path.join(repositoryRoot, "repo-registry.json"));
+  const records = Array.isArray(options.files)
+    ? options.files.map((file) => ({ repository: ".", path: file }))
+    : (selectedRepos.length ? selectedRepos : [repositoryRoot]).flatMap((repo) =>
+      (Array.isArray(selectedTask?.files) ? selectedTask.files : []).map((file) => ({ repository: path.relative(repositoryRoot, repo) || ".", path: file })));
+  let files = collectTaskFilesFromContext(repositoryRoot, profile, records);
+  let graphContextPath = null;
+  let semanticContextPath = null;
+  const semanticModule = options.includeSemanticContext === true ? loadSemanticRetrievalModule() : null;
+  const staticFindings = options.includeStaticAnalysis === true
+    ? collectStaticAnalysisForTask(repositoryRoot, { taskId: seedId, files, resultDir: options.resultDir || "analysis-results" })
+    : [];
+  if (options.includeGraphContext === true) {
+    const graphContextResult = buildGraphContextForTask({
+      repositoryRoot,
+      profile,
+      taskId: seedId,
+      outputDir: path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context")),
+      graphPath: path.join(repositoryRoot, "generated-graphs", "project-graph.json"),
+    });
+    if (graphContextResult && graphContextResult.graphContextMdPath) {
+      graphContextPath = graphContextResult.graphContextMdPath;
+    }
+  }
+  if (options.includeSemanticContext === true && semanticModule && typeof semanticModule.exportSemanticContext === "function") {
+    try {
+      const semanticQuery = [seedId, ...related.map((row) => row.title || row.id)].filter(Boolean).join(" ");
+      const semantic = semanticModule.exportSemanticContext({
+        repositoryRoot,
+        query: semanticQuery || seedId,
+        taskId: seedId,
+        profile: profileName,
+        outputDir: path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context")),
+        indexRoot: path.join(repositoryRoot, "generated-semantic-index"),
+        limit: options.limit || options.maxFiles || 80,
+      });
+      semanticContextPath = semantic.mdPath || null;
+    } catch {
+      semanticContextPath = null;
+    }
+  }
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  files = files.filter((file, index, arr) => arr.findIndex((row) => row.path === file.path) === index);
+  if (options.limit && files.length > options.limit) {
+    files = files.slice(0, options.limit);
+  }
+  const metadata = metadataEnvelope({
+    profile: profileName,
+    repositories: [...new Set([
+      ...repoPaths.map((repo) => normalizeSegments(repositoryRoot, repo)),
+      ...files.map((row) => row.repository || "."),
+    ])],
+    tasks: related.map((task) => task.id),
+    dependencies: relationships,
+    files,
+    staticFindings: staticFindings.map((finding) => ({
+      id: finding.id,
+      repository: finding.repository,
+      file: finding.file,
+      line: finding.line,
+      severity: finding.severity,
+      rule: finding.rule,
+      category: finding.category,
+      source: finding.source,
+    })),
+  });
+  const outDir = path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context"));
+  const xmlPath = path.join(outDir, "task-context.xml");
+  const mdSummary = path.join(outDir, "task-summary.md");
+  const mdDeps = path.join(outDir, "task-dependencies.md");
+  writeIfNeeded(xmlPath, generateRepoXml({ metadata, files }));
+  const summary = summarizeFiles(files, xmlPath, `Task ${seedId} Summary`);
+  const extraSummary = files.length ? [] : ["", "No selected files matched. Supply explicit --file paths or task.files; no repository scan was performed."];
+  if (graphContextPath) {
+    extraSummary.push("");
+    extraSummary.push("## Graph context");
+    extraSummary.push(`Graph context summary: ${path.basename(graphContextPath)}`);
+    extraSummary.push(`Graph context JSON: ${graphContextResultPath(graphContextPath)}`);
+  }
+  if (semanticContextPath) {
+    extraSummary.push("");
+    extraSummary.push("## Semantic context");
+    extraSummary.push(`Semantic context summary: ${path.basename(semanticContextPath)}`);
+    extraSummary.push("Related semantic context JSON: semantic-context.json");
+  }
+  writeIfNeeded(mdSummary, `${summary}\n${extraSummary.join("\n")}\n`);
+  const depLines = [`# Task Dependencies for ${seedId}`, "", ...relationships.map((edge) => `- ${edge.from} -> ${edge.to} (${edge.type})`)];
+  if (relationships.length === 0) depLines.push("- no explicit dependencies");
+  depLines.push("");
+  depLines.push("## Nexus metadata");
+  if (nexus && Array.isArray(nexus.relatedIssues)) {
+    depLines.push(`Related issues: ${nexus.relatedIssues.join(", ")}`);
+  }
+  depLines.push("## Wiki metadata");
+  if (wiki && Array.isArray(wiki.decisions)) {
+    for (const row of wiki.decisions) {
+      depLines.push(`- ${row.id || "decision"}: ${row.title || JSON.stringify(row)}`);
+    }
+  }
+  writeIfNeeded(mdDeps, `${depLines.join("\n")}\n`);
+  const tokenReport = {
+    generated_at: metadata.generated_at,
+    profile: profileName,
+    repositories: metadata.repositories,
+    tasks: metadata.tasks,
+    dependencies: metadata.dependencies,
+    estimated_tokens: metadata.estimated_tokens,
+    file_count: metadata.file_count,
+    repomix_used: false,
+    graph_context: graphContextPath || null,
+    semantic_context: semanticContextPath || null,
+    files: files.map((f) => ({ path: f.path, size: f.size, tokens: f.tokens, sha1: f.sha1, kind: f.kind })),
+  };
+  writeIfNeeded(path.join(outDir, "token-report.json"), JSON.stringify(tokenReport, null, 2));
+  return {
+    outDir,
+    xmlPath,
+    mdSummary,
+    mdDeps,
+    metadata,
+    graphContextPath,
+    semanticContextPath,
+  };
+}
+
+function buildPrContext(options) {
+  const repositoryRoot = path.resolve(options.repositoryPath || process.cwd());
+  const profiles = loadProfiles(options.profilePath || DEFAULT_PROFILES_PATH);
+  const profile = profiles[options.profile || "reviewer"] || profiles.reviewer;
+  const prId = String(options.prNumber);
+  const candidates = [
+    path.join(repositoryRoot, "pr-data", `pr-${prId}.json`),
+    path.join(repositoryRoot, "pull-requests.json"),
+    path.join(repositoryRoot, "global-prs.json"),
+  ];
+  const prRecord = candidates.reduce((memo, file) => {
+    const data = readJson(file);
+    if (memo) return memo;
+    if (!data) return memo;
+    if (Array.isArray(data)) {
+      return data.find((row) => String(row.number || row.id || "") === prId);
+    }
+    if (Array.isArray(data.prs)) {
+      return data.prs.find((row) => String(row.number || row.id || "") === prId);
+    }
+    if (data.number === Number(prId)) return data;
+    return memo;
+  }, null);
+  const changedFiles = Array.isArray(prRecord?.changedFiles) ? prRecord.changedFiles : [];
+  const repos = Array.isArray(prRecord?.repositories) ? prRecord.repositories : ["."];
+  let files = [];
+  for (const repo of repos) {
+    const absRepo = path.resolve(repositoryRoot, repo);
+    const candidate = walkFiles(absRepo, profile).map((file) => {
+      const shouldKeep = changedFiles.length === 0 || changedFiles.includes(file.path);
+      if (!shouldKeep) {
+        return null;
+      }
+      return {
+        ...file,
+        path: `${normalizeSegments(repositoryRoot, absRepo)}/${file.path}`,
+      };
+    }).filter(Boolean);
+    files.push(...candidate);
+  }
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  const staticFindings = collectStaticAnalysisForPr(repositoryRoot, {
+    prId,
+    files,
+    resultDir: options.resultDir || "analysis-results",
+  });
+  for (const finding of staticFindings) {
+    if (!finding.file) {
+      continue;
+    }
+    const normalized = String(finding.file || "").replace(/\\+/g, "/");
+    const found = files.some((row) => row.path.replace(/\\+/g, "/").toLowerCase() === normalized.toLowerCase());
+    if (found) {
+      continue;
+    }
+    const repoLabel = repos.includes(".") ? "." : repos[0] || ".";
+    const candidateRepo = repos.includes(finding.repository || "") ? (finding.repository || ".") : repoLabel;
+    const repositoryBase = path.resolve(repositoryRoot, candidateRepo === "." ? "." : candidateRepo);
+    const abs = path.resolve(repositoryBase, normalized);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      continue;
+    }
+    const content = readTextSafe(abs);
+    if (content === null) {
+      continue;
+    }
+    const rel = path.relative(repositoryRoot, abs).replace(/\\/g, "/");
+    const isDoc = isDocPath(rel, profile.documentationSuffixes || []);
+    files.push({
+      path: rel,
+      abs,
+      size: fs.statSync(abs).size,
+      content,
+      kind: isDoc ? "doc" : "code",
+      tokens: estimateTokens(content),
+      sha1: sha1(content),
+    });
+  }
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  const graphNeighborhood = collectPrGraphNeighborhood({
+    repositoryRoot,
+    changedFiles,
+    repositories: repos,
+    profileName: profile.name,
+    querySeed: prId,
+    graphPath: path.join(repositoryRoot, "generated-graphs", "project-graph.json"),
+  });
+  for (const file of graphNeighborhood.files) {
+    const duplicate = files.some((row) => row.path.replace(/\\/g, "/") === file.path.replace(/\\/g, "/"));
+    if (!duplicate) {
+      files.push(file);
+    }
+  }
+  const semanticModule = loadSemanticRetrievalModule();
+  let semanticContextPath = null;
+  if (options.includeSemanticContext !== false && semanticModule && typeof semanticModule.exportSemanticContext === "function") {
+    try {
+      const query = [prId, ...changedFiles].join(" ").trim();
+      const semantic = semanticModule.exportSemanticContext({
+        repositoryRoot,
+        query: query || prId,
+        profile: profile.name,
+        taskId: options.taskId || "",
+        repository: repos[0] || ".",
+        outputDir: path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context")),
+        indexRoot: path.join(repositoryRoot, "generated-semantic-index"),
+        limit: options.limit || options.maxFiles || 80,
+      });
+      semanticContextPath = semantic.mdPath || null;
+    } catch {
+      semanticContextPath = null;
+    }
+  }
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  const metadata = metadataEnvelope({
+    profile: profile.name,
+    repositories: repos,
+    tasks: [],
+    dependencies: [],
+    files,
+    staticFindings: staticFindings.map((finding) => ({
+      id: finding.id,
+      repository: finding.repository,
+      file: finding.file,
+      line: finding.line,
+      severity: finding.severity,
+      rule: finding.rule,
+      category: finding.category,
+      source: finding.source,
+    })),
+  });
+  const nexus = loadNexusMetadata(repositoryRoot, null, prId) || {};
+  const wiki = loadWikiMetadata(repositoryRoot) || {};
+  const outDir = path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context"));
+  const xmlPath = path.join(outDir, "pr-context.xml");
+  const relatedDecisionsPath = path.join(outDir, "related-decisions.md");
+  const affectedReposPath = path.join(outDir, "affected-repositories.md");
+  const mdSummary = path.join(outDir, "diff-summary.md");
+  writeIfNeeded(xmlPath, generateRepoXml({ metadata, files }));
+  const relations = (nexus?.prs?.find((row) => String(row.number || row.id || "") === prId) ?? null);
+  const decisions = [];
+  if (relations?.decisions && Array.isArray(relations.decisions)) {
+    decisions.push(...relations.decisions);
+  }
+  if (Array.isArray(wiki?.decisions)) {
+    for (const row of wiki.decisions) {
+      if (!decisions.includes(row.id || row.title)) {
+        decisions.push(row.id || row.title || "decision");
+      }
+    }
+  }
+  const decisionLines = ["# Related Decisions", ""];
+  if (decisions.length === 0) {
+    decisionLines.push("- no related decisions");
+  } else {
+    for (const decision of decisions) {
+      decisionLines.push(`- ${decision}`);
+    }
+  }
+  writeIfNeeded(relatedDecisionsPath, `${decisionLines.join("\n")}\n`);
+  const repoLines = ["# Affected Repositories", ""];
+  for (const repo of repos) {
+    repoLines.push(`- ${repo}`);
+  }
+  writeIfNeeded(affectedReposPath, `${repoLines.join("\n")}\n`);
+  const baseSummary = summarizeFiles(files, xmlPath, `PR-${prId} Diff Summary`);
+  const neighborhoodLines = [];
+  if (graphNeighborhood.lines.length > 0 || graphNeighborhood.files.length > 0) {
+    neighborhoodLines.push("");
+    neighborhoodLines.push("## Graph neighborhoods");
+    if (graphNeighborhood.lines.length > 0) {
+      neighborhoodLines.push(...graphNeighborhood.lines);
+    } else {
+      for (const row of graphNeighborhood.files) {
+        neighborhoodLines.push(`- ${row.path}`);
+      }
+    }
+  }
+  if (semanticContextPath) {
+    neighborhoodLines.push("");
+    neighborhoodLines.push("## Semantic context");
+    neighborhoodLines.push(`Semantic context summary: ${path.basename(semanticContextPath)}`);
+    neighborhoodLines.push("Related semantic context JSON: semantic-context.json");
+  }
+  writeIfNeeded(mdSummary, `${baseSummary}\n${neighborhoodLines.join("\n")}\n`);
+  writeIfNeeded(path.join(outDir, "token-report.json"), JSON.stringify({
+    generated_at: metadata.generated_at,
+    profile: profile.name,
+    repositories: metadata.repositories,
+    tasks: metadata.tasks,
+    dependencies: metadata.dependencies,
+    estimated_tokens: metadata.estimated_tokens,
+    file_count: metadata.file_count,
+    repomix_used: false,
+    graph_neighborhood_files: graphNeighborhood.files.length,
+    semantic_context: semanticContextPath || null,
+    files: files.map((f) => ({ path: f.path, size: f.size, tokens: f.tokens, sha1: f.sha1, kind: f.kind })),
+  }, null, 2));
+  return { outDir, xmlPath, mdSummary, relatedDecisionsPath, affectedReposPath, semanticContextPath, metadata };
+}
+
+function validateContextBudget(options) {
+  const target = path.resolve(options.contextFile || path.join(options.repositoryPath || process.cwd(), "generated-context", "repo-context.xml"));
+  const profileName = options.profile || "coder";
+  const profiles = loadProfiles(options.profilePath || DEFAULT_PROFILES_PATH);
+  const profile = profiles[profileName] || profiles.coder;
+  const reportPath = resolveTokenReportPath(target);
+  const directReport = readJson(reportPath);
+  const report = directReport || {
+    profile: profileName,
+    generated_at: new Date().toISOString(),
+    repositories: [],
+    tasks: [],
+    dependencies: [],
+    estimated_tokens: 0,
+    files: [],
+  };
+  const files = Array.isArray(report.files) ? report.files : [];
+  const failures = [];
+  const byPath = new Map();
+  const byChecksum = new Map();
+  for (const file of files) {
+    byPath.set(file.path, (byPath.get(file.path) || 0) + 1);
+    if (typeof file.sha1 === "string") {
+      byChecksum.set(file.sha1, [...(byChecksum.get(file.sha1) || []), file.path]);
+    }
+  }
+  for (const [p, count] of byPath.entries()) {
+    if (count > 1) {
+      failures.push(`duplicate file path: ${p}`);
+    }
+  }
+  for (const [hash, paths] of byChecksum.entries()) {
+    if (hash && paths.length > 1) {
+      failures.push(`duplicate file content: ${paths.join(", ")}`);
+    }
+  }
+  for (const file of files) {
+    if (file.kind === "doc" && file.tokens > profile.maxDocumentationFileTokens) {
+      failures.push(`oversized documentation file: ${file.path}`);
+    }
+  }
+  if (report.estimated_tokens > profile.tokenBudget) {
+    failures.push(`token budget exceeded: ${report.estimated_tokens}/${profile.tokenBudget}`);
+  }
+  return { valid: failures.length === 0, failures, report, profile: profileName, targetFile: target };
+}
+
+function summarizeContext(options) {
+  const xml = path.resolve(options.contextFile || path.join(options.repositoryPath || process.cwd(), "generated-context", "repo-context.xml"));
+  const reportPath = resolveTokenReportPath(xml);
+  const report = readJson(reportPath) || {
+    generated_at: new Date().toISOString(),
+    repositories: [],
+    tasks: [],
+    dependencies: [],
+    files: [],
+    estimated_tokens: 0,
+    profile: "coder",
+    include_decisions: [],
+  };
+  const outDir = path.dirname(xml);
+  const summaryPath = path.join(outDir, "context-summary.md");
+  const lines = [];
+  lines.push("# Context Summary");
+  lines.push("");
+  lines.push(`Generated at: ${report.generated_at}`);
+  lines.push(`Profile: ${report.profile}`);
+  lines.push(`Repositories: ${report.repositories.join(", ") || "unknown"}`);
+  lines.push(`Files included: ${report.files.length}`);
+  lines.push(`Files excluded: unknown`);
+  lines.push(`Estimated tokens: ${report.estimated_tokens}`);
+  lines.push("");
+  lines.push("## Tasks");
+  for (const t of report.tasks) {
+    lines.push(`- ${t}`);
+  }
+  if (report.dependencies && report.dependencies.length > 0) {
+    lines.push("");
+    lines.push("## Dependencies");
+    for (const d of report.dependencies) {
+      lines.push(`- ${typeof d === "string" ? d : `${d.from || ""}->${d.to || ""}`}`);
+    }
+  }
+  const out = `${lines.join("\n")}\n`;
+  writeIfNeeded(summaryPath, out);
+  return { summaryPath, report };
+}
+
+function loadGraphifyModule() {
+  const candidate = path.resolve(__dirname, "..", "..", "graphify", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function loadSemanticRetrievalModule() {
+  const candidate = path.resolve(__dirname, "..", "..", "semantic-retrieval", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function graphContextResultPath(graphContextPath) {
+  if (!graphContextPath) {
+    return "not generated";
+  }
+  return path.resolve(graphContextPath);
+}
+
+function readGraphifyGraph(graphPath) {
+  if (!graphPath || !fs.existsSync(graphPath)) return null;
+  try {
+    const raw = fs.readFileSync(graphPath, "utf8");
+    const graph = JSON.parse(raw);
+    if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return null;
+    return graph;
+  } catch {
+    return null;
+  }
+}
+
+function loadStaticAnalysisModule() {
+  const candidate = path.resolve(__dirname, "..", "..", "static-analysis", "src", "engine.js");
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function collectStaticAnalysisForTask(repositoryRoot, options = {}) {
+  const staticAnalysis = loadStaticAnalysisModule();
+  if (!staticAnalysis) {
+    return [];
+  }
+  const payload = staticAnalysis.loadStaticAnalysisResults(repositoryRoot, options.resultDir || "analysis-results");
+  const findings = Array.isArray(payload.findings) ? payload.findings : [];
+  const taskId = String(options.taskId || "").toUpperCase();
+  const normalizedFiles = new Set((Array.isArray(options.files) ? options.files : []).map((row) => String(row.path || "").replace(/\\+/g, "/").toLowerCase()));
+
+  return findings.filter((finding) => {
+    if (!taskId) {
+      return finding.file && normalizedFiles.has(String(finding.file || "").toLowerCase());
+    }
+    if (String(finding.metadata?.taskId || "").toUpperCase() === taskId) {
+      return true;
+    }
+    if ((finding.message || "").toLowerCase().includes(taskId.toLowerCase())) {
+      return true;
+    }
+    return normalizedFiles.has(String(finding.file || "").toLowerCase()) && finding.severity === "critical";
+  });
+}
+
+function collectStaticAnalysisForPr(repositoryRoot, options = {}) {
+  const staticAnalysis = loadStaticAnalysisModule();
+  if (!staticAnalysis) {
+    return [];
+  }
+  const payload = staticAnalysis.loadStaticAnalysisResults(repositoryRoot, options.resultDir || "analysis-results");
+  const findings = Array.isArray(payload.findings) ? payload.findings : [];
+  const prId = String(options.prId || "");
+  const normalizedFiles = new Set((Array.isArray(options.files) ? options.files : []).map((row) => String(row.path || "").replace(/\\+/g, "/").toLowerCase()));
+  return findings.filter((finding) => {
+    if (prId && String(finding.metadata?.prId || "").toUpperCase() === prId.toUpperCase()) {
+      return true;
+    }
+    if (normalizedFiles.has(String(finding.file || "").toLowerCase())) {
+      return true;
+    }
+    if (prId && (finding.message || "").toLowerCase().includes(prId.toLowerCase())) {
+      return true;
+    }
+    return false;
+  });
+}
+
+function buildGraphContextForTask(options) {
+  const graphify = loadGraphifyModule();
+  if (!graphify || typeof graphify.exportGraphContext !== "function") {
+    return null;
+  }
+  const repositoryRoot = path.resolve(options.repositoryRoot || process.cwd());
+  const outputDir = path.resolve(options.outputDir || path.join(repositoryRoot, "generated-context"));
+  const graphPath = path.resolve(options.graphPath || path.join(repositoryRoot, "generated-graphs", "project-graph.json"));
+  if (!fs.existsSync(graphPath) && typeof graphify.buildProjectGraph === "function") {
+    graphify.buildProjectGraph({
+      repositoryRoot,
+      profile: options.profile?.name || options.profile || "coder",
+      outputDir: path.join(repositoryRoot, "generated-graphs"),
+      outputFile: "project-graph.json",
+      preferExternal: false,
+    });
+  }
+  return graphify.exportGraphContext({
+    repositoryRoot,
+    outputDir,
+    graphPath,
+    profile: options.profile?.name || options.profile || "coder",
+    taskId: options.taskId,
+  });
+}
+
+function collectPrGraphNeighborhood(options) {
+  const graphify = loadGraphifyModule();
+  if (!graphify || typeof graphify.queryProjectGraph !== "function" || typeof graphify.loadProfiles !== "function") {
+    return { files: [], lines: [] };
+  }
+  const repositoryRoot = path.resolve(options.repositoryRoot || process.cwd());
+  const graphPath = path.resolve(options.graphPath || path.join(repositoryRoot, "generated-graphs", "project-graph.json"));
+  const profileName = options.profileName || "reviewer";
+  const profile = normalizeProfile(loadProfiles()[profileName] || loadProfiles().coder || {});
+  const repositoryPathMap = buildRepoPathMap(repositoryRoot);
+  if (!fs.existsSync(graphPath) && typeof graphify.buildProjectGraph === "function") {
+    graphify.buildProjectGraph({
+      repositoryRoot,
+      profile: profileName,
+      outputDir: path.join(repositoryRoot, "generated-graphs"),
+      outputFile: "project-graph.json",
+      preferExternal: false,
+    });
+  }
+  const queryGraph = graphify.queryProjectGraph({
+    repositoryRoot,
+    graphPath,
+    profile: profileName,
+    query: `${options.querySeed || ""} ${options.changedFiles.join(" ")}`,
+    limit: Math.max(10, options.maxFiles || 25),
+  });
+  const graph = readGraphifyGraph(graphPath);
+  if (!graph) {
+    return {
+      files: [],
+      lines: [],
+    };
+  }
+  const nodesById = new Map(graph.nodes.map((row) => [row.id, row]));
+  const graphFileNodes = graph.nodes.filter((row) => ["file", "test", "document"].includes(row.node_type));
+  const filePaths = new Map();
+  const addPath = (repo, candidate) => {
+    if (!candidate || typeof candidate !== "string") {
+      return;
+    }
+    const normalized = candidate.replace(/\\/g, "/").replace(/^\/+/, "");
+    const resolvedRepo = resolveRepositoryPath(repositoryRoot, repo, repositoryPathMap);
+    if (!filePaths.has(normalized)) {
+      filePaths.set(normalized, resolvedRepo);
+    }
+  };
+  for (const result of queryGraph.results || []) {
+    if (result.file) {
+      addPath(result.repository || "", result.file);
+    }
+    for (const neighbor of result.neighbors || []) {
+      const target = nodesById.get(neighbor.node_id);
+      if (!target) continue;
+      if (target.file) {
+        addPath(target.repository || result.repository || "", target.file);
+      }
+    }
+  }
+  const changedFiles = Array.isArray(options.changedFiles) ? options.changedFiles : [];
+  if (changedFiles.length > 0) {
+    for (const changed of changedFiles) {
+      const candidate = String(changed || "").replace(/\\/g, "/").replace(/^\/+/, "");
+      if (!candidate) continue;
+      const lower = candidate.toLowerCase();
+      const directMatch = graphFileNodes.find((row) => String(row.file || "").toLowerCase() === lower);
+      if (directMatch) {
+        addPath(directMatch.repository || options.repositoryRoot || ".", directMatch.file);
+        continue;
+      }
+      const suffixMatch = graphFileNodes.find((row) => String(row.file || "").toLowerCase().endsWith(`/${lower}`) || String(row.file || "").toLowerCase() === lower);
+      if (suffixMatch) {
+        addPath(suffixMatch.repository || options.repositoryRoot || ".", suffixMatch.file);
+      }
+    }
+  }
+
+  const linesOut = [];
+  const filesOut = [];
+  for (const [filePath, repository] of filePaths) {
+    const repoBase = (repository || ".").replace(/\\/g, "/").replace(/^\.\//, "");
+    const repositoryAbs = path.resolve(repositoryRoot, repoBase === "." ? "." : repoBase);
+    const fileAbs = path.resolve(repositoryAbs, filePath);
+    if (!fs.existsSync(fileAbs) || !fs.statSync(fileAbs).isFile()) {
+      continue;
+    }
+    if (!shouldIncludeFile(path.relative(repositoryRoot, fileAbs).replace(/\\/g, "/"), profile)) continue;
+    const rel = path.relative(repositoryRoot, fileAbs).replace(/\\/g, "/");
+    const content = readTextSafe(fileAbs);
+    if (content === null) continue;
+    const isDoc = isDocPath(rel, profile.documentationSuffixes || []);
+    const row = {
+      path: rel,
+      abs: fileAbs,
+      size: fs.statSync(fileAbs).size,
+      content,
+      kind: isDoc ? "doc" : "code",
+      tokens: estimateTokens(content),
+      sha1: sha1(content),
+      repository,
+    };
+    filesOut.push(row);
+    linesOut.push(`- ${rel}`);
+  }
+  return {
+    files: filesOut,
+    lines: linesOut,
+  };
+}
+
+function collectTaskFilesFromContext(repositoryRoot, profile, selectedRecords) {
+  const seen = new Set();
+  const out = [];
+  for (const row of selectedRecords || []) {
+    const recordRepo = row.repository || ".";
+    const fileRel = row.path || row.file;
+    if (!fileRel || typeof fileRel !== "string") {
+      continue;
+    }
+    const repositoryPath = path.resolve(repositoryRoot, recordRepo);
+    const abs = path.resolve(repositoryPath, fileRel.replace(/\\/g, "/"));
+    const relFromRepo = path.relative(repositoryPath, abs);
+    if (relFromRepo.startsWith("..") || relFromRepo === "") {
+      continue;
+    }
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      continue;
+    }
+    const rel = path.relative(repositoryRoot, abs).split(path.sep).join("/");
+    if (!shouldIncludeFile(relFromRepo.split(path.sep).join("/"), profile)) {
+      continue;
+    }
+    const content = readTextSafe(abs);
+    if (content === null) {
+      continue;
+    }
+    const key = rel;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const isDoc = isDocPath(rel, profile.documentationSuffixes);
+    out.push({
+      path: rel,
+      abs,
+      size: fs.statSync(abs).size,
+      content,
+      kind: isDoc ? "doc" : "code",
+      tokens: estimateTokens(content),
+      sha1: sha1(content),
+      repository: recordRepo,
+    });
+  }
+  return out;
+}
+
+function generateRepomixConfigFile(options) {
+  const profile = normalizeProfile(options.profile);
+  const templateText = fs.readFileSync(options.templatePath || DEFAULT_TEMPLATE_PATH, "utf8");
+  const rep = templateText
+    .replaceAll("{{INCLUDE_PATTERNS}}", JSON.stringify(profile.includeDirectories))
+    .replaceAll("{{EXCLUDE_PATTERNS}}", JSON.stringify(profile.excludeDirectories))
+    .replaceAll("{{IGNORE_PATTERNS}}", JSON.stringify(profile.excludeDirectories))
+    .replaceAll("{{OUTPUT_FILE}}", options.outputPath || path.join(options.repositoryPath || process.cwd(), "generated-context", "repo-context.xml"));
+  fs.mkdirSync(path.dirname(options.configPath), { recursive: true });
+  fs.writeFileSync(options.configPath, rep, "utf8");
+  return options.configPath;
+}
+
+function generateRepomixConfig(options) {
+  const profileName = options.profile || "coder";
+  const profiles = loadProfiles(options.profilePath || DEFAULT_PROFILES_PATH);
+  const profile = profiles[profileName] || profiles.coder;
+  const repositoryPath = path.resolve(options.repositoryPath || process.cwd());
+  const outputPath = path.join(repositoryPath, "repomix.config.json");
+  const out = generateRepomixConfigFile({
+    profile,
+    repositoryPath,
+    outputPath,
+    templatePath: options.templatePath || DEFAULT_TEMPLATE_PATH,
+    configPath: outputPath,
+  });
+  return { configPath: out };
+}
+
+module.exports = {
+  loadProfiles,
+  buildRepoContext,
+  buildTaskContext,
+  buildPrContext,
+  validateContextBudget,
+  summarizeContext,
+  generateRepomixConfig,
+  generateRepomixConfigFile,
+  metadataEnvelope,
+};

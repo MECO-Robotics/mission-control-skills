@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "id": "review-001",
+      "query": "Identify missed critical findings",
+      "type": "text",
+      "requiredArtifacts": ["analysis-results/findings.json", "analysis-results/review-findings.md"]
+    },
+    {
+      "id": "review-002",
+      "query": "Validate review recommendations and severity",
+      "type": "text",
+      "requiredArtifacts": ["analysis-results/findings.json", "analysis-results/review-findings.md"]
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "profiles": {
+    "architect": {
+      "name": "architect",
+      "enabledAnalyzers": ["semgrep"],
+      "block": {
+        "high": true,
+        "critical": true
+      },
+      "rules": [
+        "default"
+      ]
+    },
+    "coder": {
+      "name": "coder",
+      "enabledAnalyzers": ["semgrep"],
+      "block": {
+        "high": true,
+        "critical": true
+      },
+      "rules": [
+        "default"
+      ]
+    },
+    "reviewer": {
+      "name": "reviewer",
+      "enabledAnalyzers": ["semgrep"],
+      "block": {
+        "high": true,
+        "critical": true
+      },
+      "rules": [
+        "default"
+      ]
+    },
+    "maintainer": {
+      "name": "maintainer",
+      "enabledAnalyzers": ["semgrep"],
+      "block": {
+        "high": true,
+        "critical": true
+      },
+      "rules": [
+        "default"
+      ]
+    },
+    "ci": {
+      "name": "ci",
+      "enabledAnalyzers": ["semgrep"],
+      "block": {
+        "medium": true,
+        "high": true,
+        "critical": true
+      },
+      "rules": [
+        "default"
+      ]
+    }
+  },
+  "analyzers": {
+    "semgrep": {
+      "name": "semgrep",
+      "binary": "semgrep",
+      "command": "semgrep",
+      "enabled": true,
+      "timeoutMs": 120000,
+      "extraArgs": ["--config", "auto"]
+    }
+  },
+  "defaults": {
+    "severity": "medium",
+    "baselineDir": "analysis-baselines",
+    "resultDir": "analysis-results",
+    "maxFindingLine": 5000
+  }
+}

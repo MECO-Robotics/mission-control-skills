@@ -1,0 +1,19 @@
+{
+  "severity": {
+    "critical": ["critical", "error", "criticality", "crash"],
+    "high": ["high", "warning", "warn", "important"],
+    "medium": ["medium", "med"],
+    "low": ["low", "minor", "suggestion", "recommendation"],
+    "info": ["info", "note", "debug", "trace"]
+  },
+  "analyzers": {
+    "semgrep": {
+      "critical": ["CRITICAL", "high", "error", "critical", "CRITICAL"],
+      "high": ["high", "warning", "warn", "WARNING"],
+      "medium": ["medium", "MEDIUM", "warning", "medium"],
+      "low": ["low", "LOW", "warning", "suggestion", "advice"],
+      "info": ["info", "INFO", "note", "low"]
+    }
+  },
+  "default": "medium"
+}

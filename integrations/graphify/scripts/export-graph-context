@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+const cli = require("../src/cli");
+
+const result = cli.commandExportGraphContext(process.argv.slice(2));
+if (!result) {
+  process.exit(1);
+}
+console.log(`graph_context_json=${result.graphContextJsonPath}`);
+console.log(`graph_context_md=${result.graphContextMdPath}`);

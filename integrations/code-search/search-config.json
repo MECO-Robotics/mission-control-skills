@@ -1,0 +1,69 @@
+{
+  "version": "1.0.0",
+  "defaults": {
+    "indexDir": "generated-code-search",
+    "maxResults": 25,
+    "snippetWindow": 3,
+    "enableSourcebotFallback": true,
+    "preferSourcebot": false
+  },
+  "indexing": {
+    "codeExtensions": [
+      ".js",
+      ".ts",
+      ".tsx",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".py",
+      ".java",
+      ".go",
+      ".cs",
+      ".cpp",
+      ".c",
+      ".h",
+      ".hpp",
+      ".rb",
+      ".php",
+      ".rs",
+      ".kt",
+      ".swift"
+    ],
+    "docExtensions": [
+      ".md",
+      ".rst",
+      ".txt",
+      ".yaml",
+      ".yml"
+    ],
+    "skipDirectories": [
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      ".next",
+      ".turbo",
+      "out"
+    ],
+    "skipFilePatterns": [
+      "*.min.*",
+      "*.map"
+    ]
+  },
+  "integrations": {
+    "repoRegistry": "repo-registry.json",
+    "globalIssues": "global-issues.json",
+    "dependencyMap": "dependency-map.json",
+    "architectureWiki": "architecture-wiki.md",
+    "decisionLog": "decision-log.json",
+    "gitWiki": "git-wiki.json"
+  },
+  "weights": {
+    "exactSymbol": 1,
+    "reference": 0.7,
+    "caller": 0.6,
+    "implementation": 0.65,
+    "api": 0.6,
+    "crossRepo": 0.55
+  }
+}

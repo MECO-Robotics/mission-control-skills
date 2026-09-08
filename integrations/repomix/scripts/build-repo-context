@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+const cli = require("../src/cli");
+
+const result = cli.commandBuildRepoContext(process.argv.slice(2));
+console.log(`generated_at=${result.metadata.generated_at}`);
+console.log(`estimated_tokens=${result.metadata.estimated_tokens}`);
+console.log(`repomix_used=${result.repomixUsed}`);
+

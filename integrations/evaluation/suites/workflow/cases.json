@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "id": "wf-001",
+      "query": "issue to pr handoff includes context",
+      "type": "workflow",
+      "requiredArtifacts": [
+        "generated-context/task-context.xml",
+        "generated-context/pr-context.xml",
+        "generated-context/repo-context.xml"
+      ]
+    },
+    {
+      "id": "wf-002",
+      "query": "review package and scorecard artifacts exist",
+      "type": "workflow",
+      "requiredArtifacts": ["analysis-results/review-findings.md", "evaluations/results.json", "evaluations/scorecard.md"]
+    }
+  ]
+}

@@ -1,111 +1,26 @@
-# Mission Control Skill Repository
+# Mission Control Skills
 
-This repository is the coordination layer for Mission Control development across multiple repositories.
-It stores cross-repo state, procedures, and scripts so implementation repos remain focused on
-application code only.
+Shared development guidance and optional local coordination/context tools for Mission Control. Application builds do not require the optional adapters.
 
-## Purpose
+## Contents
 
-- Cross-repository memory and task tracking
-- Codex operating procedures and role prompts
-- Git Nexus-ready dependency/task linkage model
-- Wiki generation source of truth
-- Multi-agent coordination state
+- `skills/<name>/SKILL.md`: shared skill instructions.
+- `.mission-control/`, `prompts/`, and `scripts/`: coordination state and commands (`init`, `update-task`, `log-decision`, `generate-wiki`, `validate-state`).
+- `integrations/`: optional context, retrieval, graph, evaluation and analysis tools; each adapter documents its commands and inputs.
+- `ONBOARDING.md`: adapter reference; load only the tool relevant to the task.
 
-## Structure
+Task-context export uses explicit `--file` paths or the selected task's declared files. An empty selection never triggers a repository-wide scan. See `integrations/repomix/README.md` for opt-in enrichment.
 
-```text
-.mission-control/
-  repo-registry.json
-  global-issues.json
-  dependency-map.json
-  cross-repo-decisions.md
-  architecture-wiki.md
-  roadmap.md
+## Development and releases
 
-prompts/
-  architect.md
-  coder.md
-  reviewer.md
-  maintainer.md
-  cross-repo-change.md
+Follow `AGENTS.md`: work in a dedicated `feature/*` or `fix/*` worktree based on `origin/development`, open a PR into development, then promote development to main through a separate reviewed PR. A direct main hotfix must use the documented hotfix workflow. Do not edit promotion branches to fix review findings.
 
-skills/
-  issue-planning.md
-  implementation.md
-  review-loop.md
-  wiki-refresh.md
-  release-coordination.md
+Run relevant tests with `node --test test/integrations-*/*.test.js` and inspect `git diff --check`. Test discovery is explicit because the tools use Node's built-in test runner.
 
-scripts/
-  init
-  update-task
-  log-decision
-  generate-wiki
-  validate-state
-```
+Release tags use SemVer: major for breaking contracts, minor for compatible functionality, patch for fixes. Create tags from the reviewed main release only when a release is requested; opening a promotion PR does not publish one.
 
-## Quick start
+## Application consumption
 
-- `node scripts/init` creates required files if they are missing.
-- `node scripts/validate-state` checks registry/task/dependency consistency.
-- `node scripts/generate-wiki` produces a rendered wiki snapshot from current state files.
-- `node scripts/log-decision` appends to the cross-repository decision log.
-- `node scripts/update-task` updates entries in `global-issues.json`.
+App repositories use their sync command to import `skills/` from a selected Git revision. Pin a release or commit with `SKILLS_REF` where the app's sync implementation supports it. Imported app guidance and this repository's optional tool adapters are separate; syncing `skills/` does not install the adapter stack.
 
-This repo intentionally has **no application source code** and does not call GitHub APIs.
-
-## Shared skills compatibility
-
-The existing `skills/*` folder can continue to host shared Codex skill content.
-This mission-control scaffold adds coordination documents alongside it without changing existing
-skill packages.
-
-## Optional Git Nexus integration
-
-If you work with Git Nexus graph data, use the optional adapter in:
-
-`integrations/git-nexus/`
-
-The adapter is intentionally opt-in and does not change the baseline Mission Control contract.
-
-```bash
-node integrations/git-nexus/scripts/validate-nexus-data --input integrations/git-nexus/fixtures/sample-nexus-graph.json
-node integrations/git-nexus/scripts/export-nexus-data --output /tmp/nexus-export.json
-```
-
-## Optional Git Wiki integration
-
-If you want human-readable docs generated from Mission Control state, use the optional adapter in:
-
-`integrations/git-wiki/`
-
-It renders markdown under `wiki/` and keeps manual sections with:
-
-`<!-- MC:MANUAL-START -->`
-`<!-- MC:MANUAL-END -->`
-
-```bash
-node integrations/git-wiki/scripts/generate-wiki-pages
-node integrations/git-wiki/scripts/validate-wiki-pages
-node integrations/git-wiki/scripts/refresh-architecture-page
-node integrations/git-wiki/scripts/refresh-decision-log-page
-node integrations/git-wiki/scripts/refresh-dependency-page
-node integrations/git-wiki/scripts/refresh-task-index-page
-```
-
-This adapter is optional and does not add runtime dependencies to Mission Control.
-
-## Product repository minimum AGENTS entry
-
-Every product repository participating in Mission Control should include:
-
-```md
-This repository is coordinated through the mission-control-skill repository.
-
-For planning and coordination tasks:
-- Consult mission-control-skill
-- Respect repository boundaries
-- Record cross-repository impacts
-- Do not modify unrelated repositories
-```
+Do not add Git submodules or a new package framework merely to distribute guidance. Repository-specific tracked-versus-ignored snapshot policy remains in each app's instructions until a coordinated replacement removes the variants.

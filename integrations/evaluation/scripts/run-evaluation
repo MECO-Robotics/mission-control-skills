@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+const engine = require("../src/engine");
+
+const result = engine.runEvaluation(process.argv.slice(2));
+console.log(`evaluation_id=${result.evaluation_id}`);
+console.log(`suite=${result.suite}`);
+console.log(`score=${result.score}`);
+console.log(`pass=${result.pass}`);

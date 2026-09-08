@@ -1,0 +1,27 @@
+{
+  "repositoryRoot": "C:\\Users\\happy\\AppData\\Local\\Temp\\repomix-2EwGVF\\repo",
+  "profile": "coder",
+  "generatedAt": "2026-06-09T20:18:57.684Z",
+  "weights": {
+    "taskRelevance": 1,
+    "dependencyRelevance": 0.8,
+    "repositoryOwnershipRelevance": 0.6,
+    "semanticRelevance": 0.6,
+    "symbolRelevance": 0.55,
+    "documentationRelevance": 0.45
+  },
+  "items": [
+    {
+      "repository": ".",
+      "file": "src/index.ts",
+      "kind": "code",
+      "path": "src/index.ts",
+      "repositoryPath": ".",
+      "sha1": "b477b43b32f20afdad9bdb705ecd68536cf6d3bd",
+      "size": 20,
+      "tokenCount": 20,
+      "snippet": "export const x = 2;\n",
+      "content": "export const x = 2;\n"
+    }
+  ]
+}
