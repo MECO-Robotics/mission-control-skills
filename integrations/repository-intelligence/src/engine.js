@@ -3,7 +3,9 @@ const path = require("path");
 
 const DEFAULT_SEARCH_CONFIG_PATH = path.join(__dirname, "..", "search-config.json");
 const DEFAULT_PROFILES_PATH = path.join(__dirname, "..", "retrieval-profiles.json");
-const INDEX_ROOT = path.join(__dirname, "..", "indexes");
+function resolveIndexRoot(repositoryRoot = process.cwd(), indexRoot) {
+  return path.resolve(indexRoot || path.join(repositoryRoot, ".index"));
+}
 
 function loadGraphifyEngine() {
   const candidate = path.resolve(__dirname, "..", "..", "graphify", "src", "engine.js");
@@ -728,7 +730,7 @@ function buildIndexes(options = {}) {
   const config = loadSearchConfig(options.configPath);
   const sourceEntries = collectSourceEntries(repositoryRoot, profile);
 
-  const indexRoot = options.indexRoot || INDEX_ROOT;
+  const indexRoot = resolveIndexRoot(repositoryRoot, options.indexRoot);
   const codeDir = path.join(indexRoot, "code");
   const docsDir = path.join(indexRoot, "docs");
   const tasksDir = path.join(indexRoot, "tasks");
@@ -834,28 +836,28 @@ function readIndex(pathOrObj) {
   return readJson(pathOrObj) || { items: [] };
 }
 
-function loadSymbolIndex(root = process.cwd(), indexRoot = INDEX_ROOT) {
-  return readIndex(path.join(indexRoot, "symbols", "index.json"));
+function loadSymbolIndex(root = process.cwd(), indexRoot) {
+  return readIndex(path.join(resolveIndexRoot(root, indexRoot), "symbols", "index.json"));
 }
 
-function loadCodeIndex(root = process.cwd(), indexRoot = INDEX_ROOT) {
-  return readIndex(path.join(indexRoot, "code", "index.json"));
+function loadCodeIndex(root = process.cwd(), indexRoot) {
+  return readIndex(path.join(resolveIndexRoot(root, indexRoot), "code", "index.json"));
 }
 
-function loadDocsIndex(root = process.cwd(), indexRoot = INDEX_ROOT) {
-  return readIndex(path.join(indexRoot, "docs", "index.json"));
+function loadDocsIndex(root = process.cwd(), indexRoot) {
+  return readIndex(path.join(resolveIndexRoot(root, indexRoot), "docs", "index.json"));
 }
 
-function loadTasksIndex(root = process.cwd(), indexRoot = INDEX_ROOT) {
-  return readIndex(path.join(indexRoot, "tasks", "index.json"));
+function loadTasksIndex(root = process.cwd(), indexRoot) {
+  return readIndex(path.join(resolveIndexRoot(root, indexRoot), "tasks", "index.json"));
 }
 
-function loadDependencyIndex(root = process.cwd(), indexRoot = INDEX_ROOT) {
-  return readIndex(path.join(indexRoot, "dependencies", "index.json"));
+function loadDependencyIndex(root = process.cwd(), indexRoot) {
+  return readIndex(path.join(resolveIndexRoot(root, indexRoot), "dependencies", "index.json"));
 }
 
-function loadFindingsIndex(root = process.cwd(), indexRoot = INDEX_ROOT) {
-  return readIndex(path.join(indexRoot, "findings", "index.json"));
+function loadFindingsIndex(root = process.cwd(), indexRoot) {
+  return readIndex(path.join(resolveIndexRoot(root, indexRoot), "findings", "index.json"));
 }
 
 function normalizeQuery(input) {
@@ -877,9 +879,9 @@ function semanticSearch(options = {}) {
   const semanticBackend = loadSemanticRetrievalEngine();
   const useVector = options.preferVector && Boolean(config.search?.semantic?.enabled) && typeof semanticBackend?.semanticSearch === "function";
   const reason = useVector ? "semantic-retrieval" : "keyword-fallback";
-  const codeIndex = loadCodeIndex(root, options.indexRoot || INDEX_ROOT);
-  const docsIndex = loadDocsIndex(root, options.indexRoot || INDEX_ROOT);
-  const findingsIndex = loadFindingsIndex(root, options.indexRoot || INDEX_ROOT);
+  const codeIndex = loadCodeIndex(root, options.indexRoot);
+  const docsIndex = loadDocsIndex(root, options.indexRoot);
+  const findingsIndex = loadFindingsIndex(root, options.indexRoot);
   const all = [...(codeIndex.items || []), ...(docsIndex.items || []), ...(findingsIndex.items || [])];
   const qTokens = tokenSet(query);
 
@@ -978,7 +980,7 @@ function symbolSearch(options = {}) {
   const query = normalizeQuery(options.symbolName || options.query || "");
   const limit = normalizeLimit(options.limit, 25);
   const root = path.resolve(options.repositoryRoot || process.cwd());
-  const symbolIndex = loadSymbolIndex(root, options.indexRoot || INDEX_ROOT);
+  const symbolIndex = loadSymbolIndex(root, options.indexRoot);
   const qLower = query.toLowerCase();
   const exact = [];
   const partial = [];
@@ -1086,7 +1088,7 @@ function taskSearch(options = {}) {
   const root = path.resolve(options.repositoryRoot || process.cwd());
   const limit = normalizeLimit(options.limit, 25);
   const qLower = query.toLowerCase();
-  const tasks = loadTasksIndex(root, options.indexRoot || INDEX_ROOT).items || [];
+  const tasks = loadTasksIndex(root, options.indexRoot).items || [];
   const qTokens = tokenSet(query);
 
   const results = [];
@@ -1159,7 +1161,7 @@ function taskSearch(options = {}) {
 function dependencySearch(options = {}) {
   const query = normalizeQuery(options.query || options.task || "").toUpperCase();
   const limit = normalizeLimit(options.limit, 25);
-  const deps = loadDependencyIndex(options.repositoryRoot || process.cwd(), options.indexRoot || INDEX_ROOT).items || [];
+  const deps = loadDependencyIndex(options.repositoryRoot || process.cwd(), options.indexRoot).items || [];
   const rows = [];
   for (const edge of deps) {
     if (String(edge.from || "").toUpperCase() === query || String(edge.to || "").toUpperCase() === query || (query === "" && false)) {
@@ -1229,7 +1231,7 @@ function dependencySearch(options = {}) {
 function architectureSearch(options = {}) {
   const query = normalizeQuery(options.query);
   const limit = normalizeLimit(options.limit, 25);
-  const docs = loadDocsIndex(options.repositoryRoot || process.cwd(), options.indexRoot || INDEX_ROOT).items || [];
+  const docs = loadDocsIndex(options.repositoryRoot || process.cwd(), options.indexRoot).items || [];
   const q = query.toLowerCase();
   const qTokens = tokenSet(query);
   const rows = [];
@@ -1569,7 +1571,7 @@ function find_context_for_task(options = {}) {
         .toLowerCase(),
     ),
   );
-  const indexedFindings = loadFindingsIndex(root, options.indexRoot || INDEX_ROOT);
+  const indexedFindings = loadFindingsIndex(root, options.indexRoot);
   if (taskFiles.size > 0 && Array.isArray(indexedFindings.items)) {
     for (const row of indexedFindings.items) {
       const normFile = String(row.file || "").replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
@@ -1718,7 +1720,7 @@ function find_context_for_review(options = {}) {
 }
 
 function validateIndex(options = {}) {
-  const indexRoot = path.resolve(options.indexRoot || INDEX_ROOT);
+  const indexRoot = resolveIndexRoot(options.repositoryRoot, options.indexRoot);
   const manifestPath = path.join(indexRoot, "manifest.json");
   const symbolManifestPath = path.join(indexRoot, "symbols", "manifest.json");
   const symbolManifest = readJson(symbolManifestPath);
