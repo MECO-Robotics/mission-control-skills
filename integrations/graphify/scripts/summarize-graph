@@ -1,8 +1,0 @@
-#!/usr/bin/env node
-const cli = require("../src/cli");
-
-const result = cli.commandSummarizeGraph(process.argv.slice(2));
-if (!result || !result.summaryPath) {
-  process.exit(1);
-}
-console.log(`summary=${result.summaryPath}`);

@@ -1,7 +1,0 @@
-#!/usr/bin/env node
-const cli = require("../src/cli");
-
-const result = cli.commandArchiveBoard(process.argv.slice(2));
-console.log(`board_id=${result.board_id}`);
-console.log(`status=${result.status}`);
-console.log(`archive_path=${result.archivePath}`);

@@ -1,5 +1,0 @@
-#!/usr/bin/env node
-const engine = require("../src/engine");
-const result = engine.evaluateReviewQuality(process.argv.slice(2));
-console.log(`review_score=${result.score}`);
-console.log(`pass=${result.pass}`);
