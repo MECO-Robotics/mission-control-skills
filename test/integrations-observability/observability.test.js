@@ -4,10 +4,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = require("node:fs");
 const { test } = require("node:test");
-const { createRequire } = require("node:module");
 
-const requireFromRepo = createRequire(__filename);
-const engine = requireFromRepo("../../integrations/observability/src/engine.js");
+const engine = require("../../integrations/observability/src/engine.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "mc-observability-"));

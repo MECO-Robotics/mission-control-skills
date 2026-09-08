@@ -4,13 +4,11 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = require("node:fs");
 const { test } = require("node:test");
-const { createRequire } = require("node:module");
 
-const requireFromRepo = createRequire(__filename);
-const codeSearch = requireFromRepo("../../integrations/code-search/src/engine.js");
-const repoIntelligence = requireFromRepo("../../integrations/repository-intelligence/src/engine.js");
-const repomix = requireFromRepo("../../integrations/repomix/src/engine.js");
-const graphify = requireFromRepo("../../integrations/graphify/src/engine.js");
+const codeSearch = require("../../integrations/code-search/src/engine.js");
+const repoIntelligence = require("../../integrations/repository-intelligence/src/engine.js");
+const repomix = require("../../integrations/repomix/src/engine.js");
+const graphify = require("../../integrations/graphify/src/engine.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "mission-code-search-"));

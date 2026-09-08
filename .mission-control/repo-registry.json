@@ -1,0 +1,19 @@
+{
+  "repos": [
+    {
+      "name": "frontend",
+      "github": "",
+      "role": "Product UI and web frontend delivery"
+    },
+    {
+      "name": "backend",
+      "github": "",
+      "role": "Contracts, APIs, and backend services"
+    },
+    {
+      "name": "agents",
+      "github": "",
+      "role": "Codex process and coordination artifacts"
+    }
+  ]
+}

@@ -562,43 +562,21 @@ function buildTaskContext(options) {
     }
   }
   const repoPaths = collectRepoPaths(related, repositoryRoot, path.join(repositoryRoot, "repo-registry.json"));
-  const repoIntelligence = loadRepositoryIntelligenceModule();
-  let files = [];
-  let intelligenceContext = null;
+  const selectedTask = taskMap.get(seedId);
+  const selectedRepos = collectRepoPaths(selectedTask ? [selectedTask] : [], repositoryRoot,
+    path.join(repositoryRoot, "repo-registry.json"));
+  const records = Array.isArray(options.files)
+    ? options.files.map((file) => ({ repository: ".", path: file }))
+    : (selectedRepos.length ? selectedRepos : [repositoryRoot]).flatMap((repo) =>
+      (Array.isArray(selectedTask?.files) ? selectedTask.files : []).map((file) => ({ repository: path.relative(repositoryRoot, repo) || ".", path: file })));
+  let files = collectTaskFilesFromContext(repositoryRoot, profile, records);
   let graphContextPath = null;
   let semanticContextPath = null;
-  const semanticModule = loadSemanticRetrievalModule();
-  const staticFindings = collectStaticAnalysisForTask(repositoryRoot, {
-    taskId: seedId,
-    files: [],
-    resultDir: options.resultDir || "analysis-results",
-  });
-  if (repoIntelligence && typeof repoIntelligence.find_context_for_task === "function") {
-    try {
-      repoIntelligence.buildIndexes({ repositoryRoot });
-      intelligenceContext = repoIntelligence.find_context_for_task({
-        repositoryRoot,
-        taskId: seedId,
-        profile: profileName,
-        limit: options.limit || options.maxFiles || 80,
-      });
-      files = collectTaskFilesFromContext(repositoryRoot, profile, intelligenceContext.files);
-    } catch {
-      files = [];
-    }
-  }
-  if (!files || files.length === 0) {
-    for (const repo of repoPaths) {
-      const repoFiles = walkFiles(repo, profile);
-      for (const file of repoFiles) {
-        files.push({
-          ...file,
-          path: `${normalizeSegments(repositoryRoot, repo)}/${file.path}`,
-        });
-      }
-    }
-  }
-  if (options.includeGraphContext !== false) {
+  const semanticModule = options.includeSemanticContext === true ? loadSemanticRetrievalModule() : null;
+  const staticFindings = options.includeStaticAnalysis === true
+    ? collectStaticAnalysisForTask(repositoryRoot, { taskId: seedId, files, resultDir: options.resultDir || "analysis-results" })
+    : [];
+  if (options.includeGraphContext === true) {
     const graphContextResult = buildGraphContextForTask({
       repositoryRoot,
       profile,
@@ -610,7 +588,7 @@ function buildTaskContext(options) {
       graphContextPath = graphContextResult.graphContextMdPath;
     }
   }
-  if (options.includeSemanticContext !== false && semanticModule && typeof semanticModule.exportSemanticContext === "function") {
+  if (options.includeSemanticContext === true && semanticModule && typeof semanticModule.exportSemanticContext === "function") {
     try {
       const semanticQuery = [seedId, ...related.map((row) => row.title || row.id)].filter(Boolean).join(" ");
       const semantic = semanticModule.exportSemanticContext({
@@ -636,7 +614,7 @@ function buildTaskContext(options) {
     profile: profileName,
     repositories: [...new Set([
       ...repoPaths.map((repo) => normalizeSegments(repositoryRoot, repo)),
-      ...(intelligenceContext?.files || []).map((row) => row.repository || "."),
+      ...files.map((row) => row.repository || "."),
     ])],
     tasks: related.map((task) => task.id),
     dependencies: relationships,
@@ -658,7 +636,7 @@ function buildTaskContext(options) {
   const mdDeps = path.join(outDir, "task-dependencies.md");
   writeIfNeeded(xmlPath, generateRepoXml({ metadata, files }));
   const summary = summarizeFiles(files, xmlPath, `Task ${seedId} Summary`);
-  const extraSummary = [];
+  const extraSummary = files.length ? [] : ["", "No selected files matched. Supply explicit --file paths or task.files; no repository scan was performed."];
   if (graphContextPath) {
     extraSummary.push("");
     extraSummary.push("## Graph context");
@@ -683,24 +661,6 @@ function buildTaskContext(options) {
   if (wiki && Array.isArray(wiki.decisions)) {
     for (const row of wiki.decisions) {
       depLines.push(`- ${row.id || "decision"}: ${row.title || JSON.stringify(row)}`);
-    }
-  }
-  if (intelligenceContext && Array.isArray(intelligenceContext.decisions) && intelligenceContext.decisions.length > 0) {
-    depLines.push("## Intelligence decisions");
-    for (const decision of intelligenceContext.decisions) {
-      depLines.push(`- ${decision}`);
-    }
-  }
-  if (intelligenceContext && Array.isArray(intelligenceContext.documentation) && intelligenceContext.documentation.length > 0) {
-    depLines.push("## Intelligence documentation");
-    for (const doc of intelligenceContext.documentation) {
-      depLines.push(`- ${doc.repository || "global"}: ${doc.path || JSON.stringify(doc)}`);
-    }
-  }
-  if (intelligenceContext && Array.isArray(intelligenceContext.relatedTasks) && intelligenceContext.relatedTasks.length > 0) {
-    depLines.push("## Intelligence related tasks");
-    for (const relatedTask of intelligenceContext.relatedTasks) {
-      depLines.push(`- ${relatedTask}`);
     }
   }
   writeIfNeeded(mdDeps, `${depLines.join("\n")}\n`);
@@ -1018,18 +978,6 @@ function summarizeContext(options) {
   return { summaryPath, report };
 }
 
-function loadRepositoryIntelligenceModule() {
-  const candidate = path.resolve(__dirname, "..", "..", "repository-intelligence", "src", "engine.js");
-  if (!fs.existsSync(candidate)) {
-    return null;
-  }
-  try {
-    return require(candidate);
-  } catch {
-    return null;
-  }
-}
-
 function loadGraphifyModule() {
   const candidate = path.resolve(__dirname, "..", "..", "graphify", "src", "engine.js");
   if (!fs.existsSync(candidate)) {
@@ -1267,22 +1215,17 @@ function collectPrGraphNeighborhood(options) {
   };
 }
 
-function collectTaskFilesFromContext(repositoryRoot, profile, intelligenceRecords) {
+function collectTaskFilesFromContext(repositoryRoot, profile, selectedRecords) {
   const seen = new Set();
   const out = [];
-  for (const row of intelligenceRecords || []) {
+  for (const row of selectedRecords || []) {
     const recordRepo = row.repository || ".";
     const fileRel = row.path || row.file;
     if (!fileRel || typeof fileRel !== "string") {
       continue;
     }
     const repositoryPath = path.resolve(repositoryRoot, recordRepo);
-    const normalizedRepo = recordRepo.replace(/\\/g, "/").replace(/^\.\//, "");
-    const candidate = fileRel.replace(/^\/+/, "").replace(/\\/g, "/");
-    const relInRepo = normalizedRepo && normalizedRepo !== "." && candidate.toLowerCase().startsWith(`${normalizedRepo.toLowerCase()}/`)
-      ? candidate.slice(normalizedRepo.length + 1)
-      : candidate;
-    const abs = path.resolve(repositoryPath, relInRepo);
+    const abs = path.resolve(repositoryPath, fileRel.replace(/\\/g, "/"));
     const relFromRepo = path.relative(repositoryPath, abs);
     if (relFromRepo.startsWith("..") || relFromRepo === "") {
       continue;
@@ -1291,7 +1234,7 @@ function collectTaskFilesFromContext(repositoryRoot, profile, intelligenceRecord
       continue;
     }
     const rel = path.relative(repositoryRoot, abs).split(path.sep).join("/");
-    if (!shouldIncludeFile(rel, profile)) {
+    if (!shouldIncludeFile(relFromRepo.split(path.sep).join("/"), profile)) {
       continue;
     }
     const content = readTextSafe(abs);

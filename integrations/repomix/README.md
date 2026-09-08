@@ -38,7 +38,7 @@ with matching `*.md` summaries and token reports.
 
 ```bash
 node integrations/repomix/scripts/build-repo-context . coder
-node integrations/repomix/scripts/build-task-context MC-123
+node integrations/repomix/scripts/build-task-context MC-123 --file src/task.ts
 node integrations/repomix/scripts/build-pr-context 123
 node integrations/repomix/scripts/validate-context-budget generated-context/repo-context.xml
 node integrations/repomix/scripts/summarize-context generated-context/repo-context.xml
@@ -46,6 +46,12 @@ node integrations/repomix/scripts/generate-repomix-config .
 ```
 
 All commands default to the repository root when no path is provided.
+
+## Task selection
+
+Task export reads only repeated `--file` paths relative to `--repo`, or the selected task's repository-relative `files` entries resolved through `repo-registry.json` when no file flags are supplied. Profile include/exclude filters still apply. Dependency metadata does not select dependency files. Empty or unmatched selection produces an empty manifest with an explanation; it never scans repositories or builds search indexes as a fallback.
+
+Task graph, semantic, and static-analysis additions are opt-in through `--graph-context`, `--semantic-context`, and `--static-analysis`. These additions can expand context and generate analysis artifacts. Repository-wide and PR export commands retain their separate behavior. The exported XML and token report list the selected files; token counts remain estimates.
 
 ## Optional integrations
 

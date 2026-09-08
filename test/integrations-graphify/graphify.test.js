@@ -4,10 +4,8 @@ const os = require("node:os");
 const path = require("node:path");
 const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = require("node:fs");
 const { test } = require("node:test");
-const { createRequire } = require("node:module");
 
-const requireFromRepo = createRequire(__filename);
-const graphify = requireFromRepo("../../integrations/graphify/src/engine.js");
+const graphify = require("../../integrations/graphify/src/engine.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "graphify-"));

@@ -4,12 +4,10 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 const { mkdtempSync, rmSync, mkdirSync, writeFileSync } = require("node:fs");
 const { test } = require("node:test");
-const { createRequire } = require("node:module");
 
-const requireFromRepo = createRequire(__filename);
-const intelligence = requireFromRepo("../../integrations/repository-intelligence/src/engine.js");
-const graphify = requireFromRepo("../../integrations/graphify/src/engine.js");
-const semantic = requireFromRepo("../../integrations/semantic-retrieval/src/engine.js");
+const intelligence = require("../../integrations/repository-intelligence/src/engine.js");
+const graphify = require("../../integrations/graphify/src/engine.js");
+const semantic = require("../../integrations/semantic-retrieval/src/engine.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "mission-intel-"));
@@ -130,7 +128,7 @@ test("semantic-search finds similar implementations", () => {
     assert.equal(Array.isArray(result.results), true);
     assert.equal(result.results.length > 0, true);
     assert.equal(result.mode, "keyword-fallback");
-    assert.equal(result.results[0].symbol.includes("MC-101") || result.results[0].file.includes("auth.ts"), true);
+    assert.equal(result.results[0].symbol?.includes("MC-101") || result.results[0].file.includes("auth.ts"), true);
   } finally {
     cleanup(root);
   }
@@ -155,6 +153,7 @@ test("find_context_for_task includes findings", () => {
     intelligence.buildIndexes({ repositoryRoot: root, indexRoot, profile: "reviewer" });
     const result = intelligence.find_context_for_task({
       repositoryRoot: root,
+      indexRoot,
       taskId: "MC-101",
       profile: "reviewer",
       limit: 30,

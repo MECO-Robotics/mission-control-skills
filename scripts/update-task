@@ -1,0 +1,96 @@
+#!/usr/bin/env node
+
+const fs = require("node:fs");
+const path = require("node:path");
+
+const ROOT = process.cwd();
+const ISSUES_PATH = path.join(ROOT, ".mission-control/global-issues.json");
+
+const VALID_STATUSES = new Set([
+  "planned",
+  "queued",
+  "in_progress",
+  "blocked",
+  "review",
+  "merged",
+  "completed",
+  "cancelled",
+]);
+
+function readJSON(filePath, fallback) {
+  if (!fs.existsSync(filePath)) return fallback;
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function parseArgs(argv) {
+  const args = {};
+  for (let i = 2; i < argv.length; i++) {
+    const token = argv[i];
+    if (!token.startsWith("--")) continue;
+    const key = token.slice(2);
+    const next = argv[i + 1];
+    if (!next || next.startsWith("--")) {
+      args[key] = true;
+      continue;
+    }
+    args[key] = next;
+    i++;
+  }
+  return args;
+}
+
+function splitCsv(value) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function updateList(arr = [], add = [], remove = []) {
+  const next = [...arr];
+  const removeSet = new Set(remove);
+  for (const item of removeSet) {
+    const index = next.indexOf(item);
+    if (index >= 0) next.splice(index, 1);
+  }
+  for (const item of add) {
+    if (!next.includes(item)) next.push(item);
+  }
+  return next;
+}
+
+const args = parseArgs(process.argv);
+
+if (!args.id) {
+  console.error("--id is required");
+  process.exit(1);
+}
+
+const state = readJSON(ISSUES_PATH, { tasks: [] });
+const task = state.tasks.find((t) => t.id === args.id);
+if (!task) {
+  console.error(`task not found: ${args.id}`);
+  process.exit(1);
+}
+
+if (args.status) {
+  if (!VALID_STATUSES.has(args.status)) {
+    console.error(`invalid status: ${args.status}`);
+    process.exit(1);
+  }
+  task.status = args.status;
+}
+if (args.title) task.title = args.title;
+if (args.priority) task.priority = args.priority;
+if (args.notes) task.notes = args.notes;
+if (args.add_repo) task.repos = updateList(task.repos || [], splitCsv(args.add_repo), []);
+if (args.remove_repo) task.repos = updateList(task.repos || [], [], splitCsv(args.remove_repo));
+if (args.add_pr) task.linked_prs = updateList(task.linked_prs || [], splitCsv(args.add_pr), []);
+if (args.remove_pr)
+  task.linked_prs = updateList(task.linked_prs || [], [], splitCsv(args.remove_pr));
+if (args.add_dep) task.dependencies = updateList(task.dependencies || [], splitCsv(args.add_dep), []);
+if (args.remove_dep)
+  task.dependencies = updateList(task.dependencies || [], [], splitCsv(args.remove_dep));
+
+fs.writeFileSync(ISSUES_PATH, JSON.stringify(state, null, 2) + "\n", "utf8");
+console.log(`updated ${args.id}`);

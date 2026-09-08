@@ -14,6 +14,16 @@ function parseArgs(argv) {
     } else if (arg === "--out") {
       out.outputDir = args[i + 1];
       i += 1;
+    } else if (arg === "--file") {
+      const file = args[++i];
+      if (!file || file.startsWith("--")) throw new Error("--file requires a path.");
+      (out.files ||= []).push(file);
+    } else if (arg === "--graph-context") {
+      out.includeGraphContext = true;
+    } else if (arg === "--semantic-context") {
+      out.includeSemanticContext = true;
+    } else if (arg === "--static-analysis") {
+      out.includeStaticAnalysis = true;
     } else if (arg === "--no-repomix") {
       out.preferRepomix = false;
     } else if (arg === "--no-graph-context") {
@@ -55,7 +65,10 @@ function commandBuildTaskContext(argv) {
     taskId,
     profile,
     outputDir: parsed.outputDir,
-    includeGraphContext: parsed.includeGraphContext !== false,
+    files: parsed.files,
+    includeGraphContext: parsed.includeGraphContext === true,
+    includeSemanticContext: parsed.includeSemanticContext === true,
+    includeStaticAnalysis: parsed.includeStaticAnalysis === true,
   });
 }
 
