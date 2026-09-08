@@ -4,16 +4,15 @@ This is the canonical shared contributor workflow for Mission Control. Applicati
 
 ## Setup and validation
 
-Use Git and Node.js 22 for the dependency-free shared tools. There is no root package install. Optional adapters list additional dependencies in their own READMEs; ordinary application work does not require them.
+Use Git to edit and distribute the shared Markdown skills. There is no package install, executable tool suite or service to initialize.
 
-For tool changes, run the relevant existing tests, or the complete integration suite:
+For changes, check relative links, documented commands and skill front matter (`name` and `description`), then run:
 
 ```sh
-node --test test/integrations-*/*.test.js
 git diff --check
 ```
 
-For documentation-only changes, check links, documented commands and skill front matter, then run `git diff --check`. Do not repeat runtime suites for unchanged code. Each validation layer should prove distinct behavior; retain meaningful scenarios when consolidating test discovery or CI.
+When changing an app-facing skill, inspect its affected app consumers and verify that the existing sync command still imports the `skills/` directory. Do not add runtime tests for removed tooling or repeat application suites for unchanged application code.
 
 ## Branches and review
 
@@ -33,8 +32,8 @@ The current prototype serves no real operational data. Prefer a coherent replace
 
 Tests should exercise intended behavior, including affected failures and persistence guarantees. Existing tests are evidence, not a reason to retain broken behavior. Report commands actually run and distinguish existing failures from regressions.
 
-## Skills and optional coordination
+## Shared skills
 
-`skills/` is the canonical shared guidance source. Apps may explicitly synchronize a selected revision using their existing sync entrypoint; imported copies are optional, ignored local files. Edit shared guidance here rather than treating an imported copy as authoritative. Pin a commit or release where the sync command supports it. A skills import does not install adapters.
+`skills/` is the canonical shared guidance source. Apps may explicitly synchronize a selected revision using their existing sync entrypoint; imported copies are optional, ignored local files. Edit shared guidance here rather than treating an imported copy as authoritative. Pin a commit or release where the sync command supports it.
 
-The `.mission-control/` state, `prompts/`, flat coordination skill documents and `integrations/` adapters are opt-in workflows. Use them only when selected for the task; do not initialize state, create issue IDs, generate a wiki or load indexes for ordinary coding. Read only the selected adapter reference in [ONBOARDING.md](ONBOARDING.md).
+Use the relevant skill directly. Repository task bookkeeping, context indexes and generated wiki artifacts are not part of the skills distribution.

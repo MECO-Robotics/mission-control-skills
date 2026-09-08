@@ -1,5 +1,0 @@
-#!/usr/bin/env node
-const engine = require("../src/engine");
-const result = engine.compareEvaluations(process.argv.slice(2));
-console.log(`score_delta=${result.score_delta}`);
-console.log(`regressions=${result.regressions.length}`);

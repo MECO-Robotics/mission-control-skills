@@ -1,4 +1,0 @@
-#!/usr/bin/env node
-const cli = require("../src/cli");
-const result = cli.commandIndexRepositories(process.argv.slice(2));
-console.log(JSON.stringify(result, null, 2));

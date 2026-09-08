@@ -1,4 +1,0 @@
-#!/usr/bin/env node
-const engine = require("../src/engine");
-const result = engine.exportEvaluationSummary(process.argv.slice(2));
-console.log(`summary=${result.outputPath}`);
