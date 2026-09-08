@@ -306,3 +306,48 @@ test("semantic-search integrates optional semantic-retrieval backend mode", () =
     cleanup(root);
   }
 });
+
+
+test("default indexes belong to each requested workspace", () => {
+  const first = buildFixtureWorkspace();
+  const second = buildFixtureWorkspace();
+  try {
+    write(path.join(first.root, "global-issues.json"), JSON.stringify({ tasks: [
+      { id: "FIRST-901", title: "FirstOnly", repository: "repo-a", files: ["src/auth.ts"] },
+    ] }));
+    write(path.join(second.root, "global-issues.json"), JSON.stringify({ tasks: [
+      { id: "SECOND-902", title: "SecondOnly", repository: "repo-a", files: ["src/auth.ts"] },
+    ] }));
+    const a = intelligence.buildIndexes({ repositoryRoot: first.root });
+    const b = intelligence.buildIndexes({ repositoryRoot: second.root });
+    assert.equal(a.tasksIndexPath, path.join(first.root, ".index/tasks/index.json"));
+    assert.equal(b.tasksIndexPath, path.join(second.root, ".index/tasks/index.json"));
+    const own = intelligence.taskSearch({ repositoryRoot: first.root, query: "FIRST-901" });
+    assert.ok(own.results.some((row) => row.taskId === "FIRST-901"));
+    assert.ok(!intelligence.taskSearch({ repositoryRoot: first.root, query: "SECOND-902" }).results.some((row) => row.taskId === "SECOND-902"));
+    assert.equal(intelligence.validateIndex({ repositoryRoot: first.root }).valid, true);
+    assert.equal(intelligence.validateIndex({ repositoryRoot: second.root }).valid, true);
+  } finally {
+    cleanup(first.root);
+    cleanup(second.root);
+  }
+});
+
+for (const directory of [undefined, "generated/search"]) {
+  test(`rebuilding ${directory || "default"} indexes never indexes its own output`, () => {
+    const root = tempDir();
+    try {
+      write(path.join(root, "README.md"), "Workspace source document");
+      const options = { repositoryRoot: root, indexRoot: directory && path.join(root, directory) };
+      const first = intelligence.buildIndexes(options);
+      const readDocs = () => JSON.parse(fs.readFileSync(first.docsIndexPath, "utf8")).items;
+      const original = readDocs();
+      intelligence.buildIndexes(options);
+      assert.deepEqual(readDocs(), original);
+      assert.equal(original.length, 1);
+      assert.equal(intelligence.buildIndexes({ ...options, incremental: true }).skipped, true);
+    } finally {
+      cleanup(root);
+    }
+  });
+}

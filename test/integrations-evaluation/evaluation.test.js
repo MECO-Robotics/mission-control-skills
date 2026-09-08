@@ -69,7 +69,8 @@ test("run-evaluation supports retrieval suite in fallback mode", () => {
     assert.equal(result.profile, "retrieval");
     assert.equal(typeof result.score, "number");
     assert.equal(Boolean(result.metrics), true);
-    assert.equal(Boolean(result.metrics.context_relevance), true);
+    // No index or architecture evidence exists in this fresh workspace.
+    assert.equal(result.metrics.context_relevance, 0);
   } finally {
     cleanup(root);
   }

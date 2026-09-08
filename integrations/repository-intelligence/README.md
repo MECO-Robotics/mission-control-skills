@@ -14,7 +14,7 @@ Vector search is optional:
 
 - `search-config.json`: engine configuration and ranking behavior
 - `retrieval-profiles.json`: architect/coder/reviewer/maintainer prioritization
-- `indexes/`: persisted index artifacts by domain
+- `<repositoryRoot>/.index/`: persisted index artifacts per requested workspace (override with `indexRoot`); indexes are never shared implicitly between workspaces
   - `code/`, `docs/`, `tasks/`, `dependencies/`
 - `scripts/`: command wrappers
 - `src/`: implementation and Codex helper APIs
