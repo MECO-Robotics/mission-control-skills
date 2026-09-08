@@ -1,4 +1,6 @@
-# Mission Control Adapter Onboarding
+# Optional adapter reference
+
+Load only the adapter selected for the task. None of these tools or state files is a prerequisite for application development.
 
 ## RepoMIX context-generation adapter
 
@@ -10,7 +12,7 @@ It is optional and uses Repomix when available, with deterministic local fallbac
 
 ## Repository Intelligence adapter
 
-Mission Control now ships a repository-intelligence layer under `integrations/repository-intelligence/` that all repos should consume from.
+Mission Control now ships a repository-intelligence layer under `integrations/repository-intelligence/` that repositories can choose to consume.
 
 Use it to get context-relevant files, symbols, tasks, dependencies, architecture notes, and ranked hybrid retrieval output for Codex workflows.
 
