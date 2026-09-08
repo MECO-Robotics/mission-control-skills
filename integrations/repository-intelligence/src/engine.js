@@ -217,6 +217,7 @@ function walkFiles(rootAbs, filters = {}) {
   while (stack.length > 0) {
     const rel = stack.pop();
     const abs = path.join(rootAbs, rel);
+    if (filters.indexRoot && (abs === filters.indexRoot || abs.startsWith(`${filters.indexRoot}${path.sep}`))) continue;
     const dirents = fs.readdirSync(abs, { withFileTypes: true });
     for (const item of dirents) {
       const childRel = rel === "." ? item.name : `${rel}/${item.name}`;
@@ -344,7 +345,7 @@ function repoPathFor(root, repoRel) {
   return path.resolve(root, repoRel || ".");
 }
 
-function collectSourceEntries(repositoryRoot, filters = {}) {
+function collectSourceEntries(repositoryRoot, filters = {}, indexRoot) {
   const repos = loadRepoRegistry(repositoryRoot);
   const sourceConfig = loadSearchConfig();
   const excludeDirectories = new Set([...(sourceConfig.index.excludeDirectories || []), ...(filters.excludeDirectories || [])]);
@@ -356,7 +357,7 @@ function collectSourceEntries(repositoryRoot, filters = {}) {
       continue;
     }
     const repoPath = String(repo.path || "").replace(/\\/g, "/");
-    const files = walkFiles(repoAbs, { excludeDirectories: [...excludeDirectories, ".gitignore"] });
+    const files = walkFiles(repoAbs, { excludeDirectories: [...excludeDirectories, ".gitignore"], indexRoot });
     for (const fileAbs of files) {
       const rel = path.relative(repoAbs, fileAbs).split(path.sep).join("/");
       if (seen.has(fileAbs)) {
@@ -563,13 +564,12 @@ function collectFindingRecords(repositoryRoot) {
     .filter((row) => row.file);
 }
 
-function buildIndexContent(repositoryRoot) {
+function buildIndexContent(repositoryRoot, sourceEntries) {
   const sourceConfig = loadSearchConfig();
   const codeItems = [];
   const docItems = [];
   const symbolItems = [];
   const findingItems = [];
-  const sourceEntries = collectSourceEntries(repositoryRoot, {});
 
   for (const entry of sourceEntries) {
     const { kind, relativePath, absolutePath, content, repositoryPath } = entry;
@@ -728,16 +728,15 @@ function buildIndexes(options = {}) {
   const profiles = loadProfiles();
   const profile = normalizeProfile(profiles[profileName] || profiles.coder || {});
   const config = loadSearchConfig(options.configPath);
-  const sourceEntries = collectSourceEntries(repositoryRoot, profile);
-
   const indexRoot = resolveIndexRoot(repositoryRoot, options.indexRoot);
+  const sourceEntries = collectSourceEntries(repositoryRoot, profile, indexRoot);
   const codeDir = path.join(indexRoot, "code");
   const docsDir = path.join(indexRoot, "docs");
   const tasksDir = path.join(indexRoot, "tasks");
   const depsDir = path.join(indexRoot, "dependencies");
   const findingsDir = path.join(indexRoot, "findings");
 
-  const built = buildIndexContent(repositoryRoot);
+  const built = buildIndexContent(repositoryRoot, sourceEntries);
   const manifestPath = path.join(indexRoot, "manifest.json");
   const previousManifest = readJson(manifestPath);
   if (options.incremental && previousManifest && validateExistingSource(repositoryRoot, previousManifest, sourceEntries)) {

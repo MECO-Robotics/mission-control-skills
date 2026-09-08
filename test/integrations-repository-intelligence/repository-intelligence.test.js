@@ -332,3 +332,22 @@ test("default indexes belong to each requested workspace", () => {
     cleanup(second.root);
   }
 });
+
+for (const directory of [undefined, "generated/search"]) {
+  test(`rebuilding ${directory || "default"} indexes never indexes its own output`, () => {
+    const root = tempDir();
+    try {
+      write(path.join(root, "README.md"), "Workspace source document");
+      const options = { repositoryRoot: root, indexRoot: directory && path.join(root, directory) };
+      const first = intelligence.buildIndexes(options);
+      const readDocs = () => JSON.parse(fs.readFileSync(first.docsIndexPath, "utf8")).items;
+      const original = readDocs();
+      intelligence.buildIndexes(options);
+      assert.deepEqual(readDocs(), original);
+      assert.equal(original.length, 1);
+      assert.equal(intelligence.buildIndexes({ ...options, incremental: true }).skipped, true);
+    } finally {
+      cleanup(root);
+    }
+  });
+}
