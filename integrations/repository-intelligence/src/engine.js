@@ -883,7 +883,6 @@ function semanticSearch(options = {}) {
   const all = [...(codeIndex.items || []), ...(docsIndex.items || []), ...(findingsIndex.items || [])];
   const qTokens = tokenSet(query);
 
-  const semanticBackend = loadSemanticRetrievalEngine();
   const backendItems = [];
   if (semanticBackend && typeof semanticBackend.semanticSearch === "function") {
     const byKey = new Set();
