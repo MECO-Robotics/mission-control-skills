@@ -1,5 +1,7 @@
 # Skill: Review Loop
 
+Optional coordination workflow: use only when explicitly selected for the task. These state files and bookkeeping steps are not prerequisites for ordinary contributions.
+
 Purpose: Keep review cycles actionable and cross-repo aware.
 
 Review sequence:

@@ -1,5 +1,7 @@
 # Skill: Issue Planning
 
+Optional coordination workflow: use only when explicitly selected for the task. These state files and bookkeeping steps are not prerequisites for ordinary contributions.
+
 Purpose: Turn product intent into mission-control tasks and dependency-aware execution plans.
 
 Inputs:

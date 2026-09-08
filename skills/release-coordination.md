@@ -1,5 +1,7 @@
 # Skill: Release Coordination
 
+Optional coordination workflow: use only when explicitly selected for the task. These state files and bookkeeping steps are not prerequisites for ordinary contributions.
+
 Purpose: Track cross-repo readiness for release progression.
 
 Inputs:
@@ -13,5 +15,5 @@ Workflow:
 4. Coordinate release notes and rollback plan.
 
 Communication:
-- Publish a concise status summary to mission-control maintainers.
+- Prepare a concise status summary; send it to maintainers only when authorized.
 - Preserve historical decisions in `.mission-control/cross-repo-decisions.md`.

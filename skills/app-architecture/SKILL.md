@@ -1,16 +1,13 @@
 ---
 name: app-architecture
-description: Use when changing Mission Control app architecture, repo boundaries, navigation structure, persistence, or cross-repo contracts.
+description: Use when changing Mission Control ownership boundaries, navigation, persistence or cross-repository contracts.
 ---
 
-# App Architecture
+# App architecture
 
-Mission Control is split across web, platform API, and mobile app repos. Before changing shared behavior, identify the owning repo and the consumers that depend on it.
-
-## Workflow
-
-- Inspect the route, schema, type, or UI surface that owns the behavior before editing.
-- For contract changes, treat the platform API validation as the source of truth, then align web and mobile consumers.
-- Keep changes small and cohesive; avoid broad refactors unless the task requires them.
-- Preserve review and confirmation gates for project structure changes such as mechanisms, subsystems, or generated records.
-- Validate in every touched repo with the repo-appropriate typecheck, test, or build command.
+- Inspect the current behavior owner and affected consumers before choosing a repair or replacement.
+- Prefer one authoritative representation, explicit dependencies and cohesive ownership. Remove superseded paths; avoid pass-through layers and splitting solely to meet file limits.
+- Platform runtime validation defines the transport contract. Update affected clients, schemas, fixtures and documentation together.
+- Current prototype state is disposable. Do not add legacy imports, dual writes or compatibility solely to preserve it; document intentional resets and breaking changes.
+- Product confirmation behavior must follow the requested workflow, not a blanket restriction on creating project structure.
+- Validate intended behavior and affected failure paths with the existing tools in each touched repository.

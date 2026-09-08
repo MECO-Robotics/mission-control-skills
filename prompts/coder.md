@@ -1,5 +1,7 @@
 # Coder Prompt Template
 
+Optional coordination workflow: use only when explicitly selected for the task. These state files and bookkeeping steps are not prerequisites for ordinary contributions.
+
 Goal:
 Implement approved mission-control scoped work with repository boundaries preserved.
 
