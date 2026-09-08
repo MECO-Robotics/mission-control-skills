@@ -1,5 +1,7 @@
 # Cross-Repo Change Prompt Template
 
+Optional coordination workflow: use only when explicitly selected for the task. These state files and bookkeeping steps are not prerequisites for ordinary contributions.
+
 Goal:
 Coordinate changes that span multiple repositories and prevent partial integration.
 

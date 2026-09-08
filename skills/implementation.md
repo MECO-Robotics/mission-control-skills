@@ -1,5 +1,7 @@
 # Skill: Implementation
 
+Optional coordination workflow: use only when explicitly selected for the task. These state files and bookkeeping steps are not prerequisites for ordinary contributions.
+
 Purpose: Execute scoped changes with traceability and minimal cross-repo impact.
 
 Guardrails:

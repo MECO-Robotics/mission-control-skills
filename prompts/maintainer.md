@@ -1,5 +1,7 @@
 # Maintainer Prompt Template
 
+Optional coordination workflow: use only when explicitly selected for the task. These state files and bookkeeping steps are not prerequisites for ordinary contributions.
+
 Goal:
 Run safe merge and release coordination for multi-repo workstreams.
 
