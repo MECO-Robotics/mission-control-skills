@@ -4,10 +4,8 @@ const os = require("node:os");
 const path = require("node:path");
 const { test } = require("node:test");
 const { mkdtempSync, rmSync, mkdirSync, writeFileSync } = require("node:fs");
-const { createRequire } = require("node:module");
 
-const requireFromRepo = createRequire(__filename);
-const semantic = requireFromRepo("../../integrations/semantic-retrieval/src/engine.js");
+const semantic = require("../../integrations/semantic-retrieval/src/engine.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "mission-semantic-"));

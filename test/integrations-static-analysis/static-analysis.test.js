@@ -4,10 +4,8 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = require("node:fs");
 const { test } = require("node:test");
-const { createRequire } = require("node:module");
 
-const requireFromRepo = createRequire(__filename);
-const staticAnalysis = requireFromRepo("../../integrations/static-analysis/src/engine.js");
+const staticAnalysis = require("../../integrations/static-analysis/src/engine.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "mc-static-analysis-"));

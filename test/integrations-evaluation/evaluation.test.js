@@ -3,11 +3,9 @@ const { rmSync, mkdirSync, writeFileSync, existsSync, mkdtempSync } = require("n
 const os = require("node:os");
 const path = require("node:path");
 const { test } = require("node:test");
-const { createRequire } = require("node:module");
 
-const requireFromRepo = createRequire(__filename);
-const evaluation = requireFromRepo("../../integrations/evaluation/src/engine.js");
-const promptfooProvider = requireFromRepo("../../integrations/evaluation/providers/promptfoo/index.js");
+const evaluation = require("../../integrations/evaluation/src/engine.js");
+const promptfooProvider = require("../../integrations/evaluation/providers/promptfoo/index.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "mc-eval-test-"));

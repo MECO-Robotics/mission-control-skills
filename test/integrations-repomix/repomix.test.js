@@ -4,12 +4,10 @@ const os = require("node:os");
 const path = require("node:path");
 const { test } = require("node:test");
 const { mkdtempSync, writeFileSync, mkdirSync, rmSync } = require("node:fs");
-const { createRequire } = require("node:module");
 
-const requireFromRepo = createRequire(__filename);
-const repomix = requireFromRepo("../../integrations/repomix/src/engine.js");
-const graphify = requireFromRepo("../../integrations/graphify/src/engine.js");
-const semantic = requireFromRepo("../../integrations/semantic-retrieval/src/engine.js");
+const repomix = require("../../integrations/repomix/src/engine.js");
+const graphify = require("../../integrations/graphify/src/engine.js");
+const semantic = require("../../integrations/semantic-retrieval/src/engine.js");
 
 function write(filePath, content) {
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -101,6 +99,7 @@ test("build-task-context can include graph context summaries", () => {
     const out = repomix.buildTaskContext({
       repositoryPath: repo,
       taskId: "MC-500",
+      includeGraphContext: true,
       outputDir: path.join(repo, "generated-context"),
       profile: "coder",
     });
@@ -133,6 +132,7 @@ test("build-task-context can include semantic context summaries", () => {
     const out = repomix.buildTaskContext({
       repositoryPath: repo,
       taskId: "MC-700",
+      includeSemanticContext: true,
       outputDir: path.join(repo, "generated-context"),
       profile: "coder",
     });
@@ -285,4 +285,63 @@ test("falls back when repomix binary is unavailable", () => {
   } finally {
     cleanupDir(root);
   }
+});
+
+
+test("task export selects only declared files without indexing or automatic enrichment", () => {
+  const root = tempDir();
+  try {
+    write(path.join(root, "repo-registry.json"), JSON.stringify({ repositories: { app: { path: "app" } } }));
+    write(path.join(root, "global-issues.json"), JSON.stringify({ tasks: [
+      { id: "MC-1", repository: "app", files: ["src/selected.ts", "src/selected.ts", "node_modules/hidden.js"] },
+      { id: "MC-2", repository: "app", files: ["src/unrelated.ts"] },
+    ] }));
+    write(path.join(root, "dependency-map.json"), JSON.stringify({ dependencies: [{ from: "MC-1", to: "MC-2", type: "depends_on" }] }));
+    write(path.join(root, "app/src/selected.ts"), "export const selected = true;");
+    write(path.join(root, "app/src/unrelated.ts"), "unrelated");
+    write(path.join(root, "app/node_modules/hidden.js"), "excluded");
+    const result = repomix.buildTaskContext({ repositoryPath: root, taskId: "MC-1" });
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(result.outDir, "token-report.json"), "utf8")).files.map((file) => file.path), ["app/src/selected.ts"]);
+    assert.equal(result.graphContextPath, null);
+    assert.equal(result.semanticContextPath, null);
+    assert.deepEqual(fs.readdirSync(root).sort(), ["app", "dependency-map.json", "generated-context", "global-issues.json", "repo-registry.json"]);
+    const empty = repomix.buildTaskContext({ repositoryPath: root, taskId: "MISSING" });
+    assert.equal(empty.metadata.file_count, 0);
+    assert.match(fs.readFileSync(path.join(root, "generated-context/task-summary.md"), "utf8"), /No selected files matched/);
+  } finally { cleanupDir(root); }
+});
+
+test("task CLI explicit files override task records and optional expansion requires flags", () => {
+  const cli = require("../../integrations/repomix/src/cli.js");
+  const root = tempDir();
+  try {
+    write(path.join(root, "src/one.ts"), "one");
+    write(path.join(root, "src/two.ts"), "two");
+    write(path.join(root, "src/unselected.ts"), "unselected");
+    write(path.join(root, "global-issues.json"), JSON.stringify({ tasks: [{ id: "MC-1", files: ["src/unselected.ts"] }] }));
+    const result = cli.commandBuildTaskContext(["MC-1", "--repo", root, "--file", "src/two.ts", "--file", "src/one.ts"]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(result.outDir, "token-report.json"), "utf8")).files.map((file) => file.path), ["src/one.ts", "src/two.ts"]);
+    assert.equal(result.graphContextPath, null);
+    assert.equal(result.semanticContextPath, null);
+    assert.throws(() => cli.parseArgs(["--file", "--repo", root]), /requires a path/);
+    assert.deepEqual(cli.parseArgs(["--graph-context", "--semantic-context", "--static-analysis"]), {
+      includeGraphContext: true, includeSemanticContext: true, includeStaticAnalysis: true,
+    });
+  } finally { cleanupDir(root); }
+});
+
+
+test("declared task paths stay repository-relative even when a directory repeats its name", () => {
+  const root = tempDir();
+  try {
+    write(path.join(root, "repo-registry.json"), JSON.stringify({ repositories: { src: { path: "src" } } }));
+    write(path.join(root, "global-issues.json"), JSON.stringify({ tasks: [{ id: "MC-1", repository: "src", files: ["src/selected.ts"] }] }));
+    write(path.join(root, "src/selected.ts"), "wrong file");
+    write(path.join(root, "src/src/selected.ts"), "selected file");
+    const result = repomix.buildTaskContext({ repositoryPath: root, taskId: "MC-1" });
+    const report = JSON.parse(fs.readFileSync(path.join(result.outDir, "token-report.json"), "utf8"));
+    assert.deepEqual(report.files.map((file) => file.path), ["src/src/selected.ts"]);
+    assert.match(fs.readFileSync(result.xmlPath, "utf8"), /selected file/);
+    assert.doesNotMatch(fs.readFileSync(result.xmlPath, "utf8"), /wrong file/);
+  } finally { cleanupDir(root); }
 });

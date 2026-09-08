@@ -4,10 +4,8 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 const { mkdtempSync, rmSync, mkdirSync, writeFileSync } = require("node:fs");
 const { test } = require("node:test");
-const { createRequire } = require("node:module");
 
-const requireFromRepo = createRequire(__filename);
-const blackboard = requireFromRepo("../../integrations/blackboard/src/engine.js");
+const blackboard = require("../../integrations/blackboard/src/engine.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "blackboard-"));

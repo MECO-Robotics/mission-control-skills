@@ -4,12 +4,10 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 const { mkdtempSync, rmSync, mkdirSync, writeFileSync } = require("node:fs");
 const { test } = require("node:test");
-const { createRequire } = require("node:module");
 
-const requireFromRepo = createRequire(__filename);
-const intelligence = requireFromRepo("../../integrations/repository-intelligence/src/engine.js");
-const graphify = requireFromRepo("../../integrations/graphify/src/engine.js");
-const semantic = requireFromRepo("../../integrations/semantic-retrieval/src/engine.js");
+const intelligence = require("../../integrations/repository-intelligence/src/engine.js");
+const graphify = require("../../integrations/graphify/src/engine.js");
+const semantic = require("../../integrations/semantic-retrieval/src/engine.js");
 
 function tempDir() {
   return mkdtempSync(path.join(os.tmpdir(), "mission-intel-"));
