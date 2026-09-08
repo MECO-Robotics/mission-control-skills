@@ -1,0 +1,178 @@
+#!/usr/bin/env node
+
+const path = require("node:path");
+const {
+  loadRepoRegistry,
+  loadIssuesFile,
+  loadDependencyMapFile,
+  parseArgs,
+  writeJSON,
+  validateGraph,
+  parseStatusForTask,
+  uniqueArray,
+} = require("./_nexus-lib");
+
+const args = parseArgs(process.argv.slice(2));
+const output = args.flags.output;
+if (args.flags.help) {
+  console.log("Usage: node export-nexus-data [--output graph.json]");
+  process.exit(0);
+}
+
+const repoRegistry = loadRepoRegistry();
+const issuesFile = loadIssuesFile();
+const dependencyFile = loadDependencyMapFile();
+
+const tasks = Array.isArray(issuesFile.data.tasks) ? issuesFile.data : { tasks: [] };
+const dependencies = Array.isArray(dependencyFile.data.dependencies) ? dependencyFile.data.dependencies : [];
+
+const nodes = [];
+const edges = [];
+const nodeIds = new Set();
+
+for (const repo of repoRegistry.data.repos || []) {
+  if (!repo || !repo.name) continue;
+  const nodeId = `repository:${repo.name}`;
+  nodes.push({
+    id: nodeId,
+    type: "repository",
+    repo: repo.name,
+    external_id: repo.name,
+    title: `${repo.name} repository`,
+    status: "active",
+    metadata: {
+      role: repo.role || "",
+      github: repo.github || "",
+    },
+  });
+  nodeIds.add(nodeId);
+}
+
+const taskIds = new Set();
+for (const task of tasks.tasks || []) {
+  if (!task || !task.id) continue;
+  taskIds.add(task.id);
+  const repo = Array.isArray(task.repos) && task.repos[0] ? task.repos[0] : "agents";
+  nodes.push({
+    id: task.id,
+    type: "task",
+    repo,
+    external_id: task.id,
+    title: task.title || task.id,
+    status: parseStatusForTask(task.status),
+    metadata: {
+      priority: task.priority || "medium",
+      linked_pr_count: (task.linked_prs || []).length,
+      source: "mission-control",
+      updated: new Date().toISOString(),
+    },
+  });
+  nodeIds.add(task.id);
+}
+
+for (const task of tasks.tasks || []) {
+  const repos = uniqueArray(Array.isArray(task.repos) ? task.repos : []);
+  const source = task.id;
+  for (const repoName of repos) {
+    const target = `repository:${repoName}`;
+    if (!nodeIds.has(target)) continue;
+    edges.push({
+      source,
+      target,
+      type: "belongs_to",
+      metadata: {
+        imported_from: "mission-control",
+      },
+    });
+  }
+}
+
+for (const task of tasks.tasks || []) {
+  const source = task.id;
+  const deps = uniqueArray(Array.isArray(task.dependencies) ? task.dependencies : []);
+  for (const target of deps) {
+    if (!nodeIds.has(target)) continue;
+    edges.push({
+      source,
+      target,
+      type: "depends_on",
+      metadata: {
+        imported_from: "mission-control",
+      },
+    });
+  }
+}
+
+for (const task of tasks.tasks || []) {
+  const source = task.id;
+  const linked = uniqueArray(Array.isArray(task.linked_prs) ? task.linked_prs : []);
+  for (const pr of linked) {
+    const prId = `pull_request:${String(pr).replace(/\\s+/g, "-")}`;
+    if (!nodeIds.has(prId)) {
+      nodes.push({
+        id: prId,
+        type: "pull_request",
+        repo: (Array.isArray(task.repos) && task.repos[0]) || "agents",
+        external_id: String(pr),
+        title: `PR ${pr}`,
+        status: "open",
+        metadata: {
+          source: "mission-control",
+          task_id: task.id,
+        },
+      });
+      nodeIds.add(prId);
+    }
+    edges.push({
+      source,
+      target: prId,
+      type: "modifies",
+      metadata: {
+        imported_from: "mission-control",
+      },
+    });
+  }
+}
+
+for (const dep of dependencies) {
+  const source = `repository:${dep.source}`;
+  const target = `repository:${dep.target}`;
+  if (!nodeIds.has(source) || !nodeIds.has(target)) continue;
+  edges.push({
+    source,
+    target,
+    type: "depends_on",
+    metadata: {
+      reason: dep.reason || "cross-repo",
+      source: "dependency-map",
+    },
+  });
+}
+
+const sortedNodes = nodes
+  .slice()
+  .sort((a, b) =>
+    a.type.localeCompare(b.type) ||
+    a.repo.localeCompare(b.repo) ||
+    a.id.localeCompare(b.id)
+  );
+const sortedEdges = edges
+  .slice()
+  .sort((a, b) =>
+    a.source.localeCompare(b.source) ||
+    a.target.localeCompare(b.target) ||
+    a.type.localeCompare(b.type)
+  );
+
+const outputGraph = { nodes: sortedNodes, edges: sortedEdges };
+
+const knownRepos = new Set((repoRegistry.data.repos || []).map((repo) => repo.name));
+const errors = validateGraph(outputGraph, { knownRepos, checkUnknownRepos: false });
+if (!errors.valid) {
+  for (const error of errors.errors) {
+    console.error(`error: ${error}`);
+  }
+  process.exit(1);
+}
+
+writeJSON(outputGraph, output);

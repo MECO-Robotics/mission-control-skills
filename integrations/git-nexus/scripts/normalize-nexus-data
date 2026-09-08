@@ -1,0 +1,49 @@
+#!/usr/bin/env node
+
+const {
+  parseArgs,
+  readJSON,
+  validateGraph,
+  loadRepoRegistry,
+  normalizeGraph,
+  writeJSON,
+} = require("./_nexus-lib");
+
+const args = parseArgs(process.argv.slice(2));
+const input = args.positional[0] || args.flags.input;
+const output = args.flags.output;
+const allowDangling = args.flags["allow-dangling"];
+
+if (!input) {
+  console.error("Usage: node normalize-nexus-data <graph.json> [--input graph.json] [--output normalized.json] [--allow-dangling]");
+  process.exit(1);
+}
+
+let graph;
+try {
+  graph = readJSON(input, "nexus graph");
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
+
+const { names: knownRepos } = loadRepoRegistry();
+const result = validateGraph(graph, { knownRepos, checkUnknownRepos: true });
+if (result.errors.length > 0) {
+  for (const error of result.errors) {
+    console.error(`error: ${error}`);
+  }
+  process.exit(1);
+}
+
+const normalized = normalizeGraph(graph);
+if (normalized.dangling.length > 0) {
+  console.error(`warning: ${normalized.dangling.length} dangling edge(s) were skipped`);
+}
+
+if (normalized.dangling.length > 0 && !allowDangling) {
+  console.error("normalize completed with dangling edges; use --allow-dangling to permit continuation");
+  process.exit(1);
+}
+
+writeJSON({ nodes: normalized.nodes, edges: normalized.edges }, output);

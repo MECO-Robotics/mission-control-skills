@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+
+const fs = require("node:fs");
+const path = require("node:path");
+
+const ROOT = process.cwd();
+const MC_DIR = path.join(ROOT, ".mission-control");
+const REQUIRED_STATUSES = new Set([
+  "planned",
+  "queued",
+  "in_progress",
+  "blocked",
+  "review",
+  "merged",
+  "completed",
+  "cancelled",
+]);
+
+function readJSON(filePath, name) {
+  if (!fs.existsSync(filePath)) {
+    console.error(`${name} missing: ${path.relative(ROOT, filePath)}`);
+    process.exit(1);
+  }
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (error) {
+    console.error(`invalid JSON in ${path.relative(ROOT, filePath)}: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+const registry = readJSON(path.join(MC_DIR, "repo-registry.json"), "Repository registry");
+const issues = readJSON(path.join(MC_DIR, "global-issues.json"), "Global issues");
+const dependencyMap = readJSON(path.join(MC_DIR, "dependency-map.json"), "Dependency map");
+
+const knownRepos = new Set((registry.repos || []).map((repo) => repo.name));
+const tasks = new Map((issues.tasks || []).map((task) => [task.id, task]));
+
+const errors = [];
+
+for (const dep of dependencyMap.dependencies || []) {
+  if (!knownRepos.has(dep.source)) {
+    errors.push(`dependency source unknown: ${dep.source}`);
+  }
+  if (!knownRepos.has(dep.target)) {
+    errors.push(`dependency target unknown: ${dep.target}`);
+  }
+}
+
+for (const task of issues.tasks || []) {
+  if (!task.id) errors.push(`task missing id: ${JSON.stringify(task)}`);
+  if (task.status && !REQUIRED_STATUSES.has(task.status)) {
+    errors.push(`invalid status for ${task.id}: ${task.status}`);
+  }
+  for (const depId of task.dependencies || []) {
+    if (!tasks.has(depId)) {
+      errors.push(`task ${task.id} references missing dependency: ${depId}`);
+    }
+  }
+}
+
+const seen = new Set();
+for (const repoName of knownRepos) {
+  if (seen.has(repoName)) errors.push(`duplicate repo in registry: ${repoName}`);
+  seen.add(repoName);
+}
+
+if (errors.length > 0) {
+  for (const issue of errors) {
+    console.error(`error: ${issue}`);
+  }
+  process.exit(1);
+}
+
+console.log("state validation passed");

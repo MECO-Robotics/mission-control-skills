@@ -1,0 +1,342 @@
+#!/usr/bin/env node
+
+const fs = require("node:fs");
+const path = require("node:path");
+
+const {
+  parseArgs,
+  readJSON,
+  validateGraph,
+  loadRepoRegistry,
+  loadIssuesFile,
+  loadDependencyMapFile,
+  loadDecisionLog,
+  writeJSON,
+  parseStatusForTask,
+  uniqueArray,
+} = require("./_nexus-lib");
+
+const args = parseArgs(process.argv.slice(2));
+const input = args.positional[0] || args.flags.input;
+if (!input) {
+  console.error("Usage: node import-nexus-data <graph.json> [--input graph.json]");
+  process.exit(1);
+}
+
+let graph;
+try {
+  graph = readJSON(input, "nexus graph");
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
+
+const { names: knownRepos } = loadRepoRegistry();
+const graphValidation = validateGraph(graph, { knownRepos, checkUnknownRepos: true });
+if (graphValidation.errors.length > 0) {
+  for (const error of graphValidation.errors) console.error(`error: ${error}`);
+  process.exit(1);
+}
+if (graphValidation.warnings.length > 0) {
+  for (const warning of graphValidation.warnings) console.error(`warning: ${warning}`);
+}
+
+const issuesFile = loadIssuesFile();
+const dependencyFile = loadDependencyMapFile();
+const decisionsFile = loadDecisionLog();
+
+const nodeMap = new Map(graph.nodes.map((node) => [node.id, node]));
+const existing = Array.isArray(issuesFile.data.tasks) ? issuesFile.data.tasks.slice() : [];
+const taskMap = new Map(existing.map((task) => [task.id, task]));
+
+const nodeToDirectTaskIds = new Map();
+const issueTaskPairs = [];
+const directTaskNodes = new Set();
+for (const node of graph.nodes) {
+  if (node.type === "task") {
+    directTaskNodes.add(node.id);
+    nodeToDirectTaskIds.set(node.id, new Set([node.id]));
+  }
+}
+
+for (const edge of graph.edges) {
+  const source = nodeMap.get(edge.source);
+  const target = nodeMap.get(edge.target);
+  if (!source || !target) continue;
+
+  if (edge.type === "implements" || edge.type === "belongs_to") {
+    if (source.type === "issue" && target.type === "task") {
+      issueTaskPairs.push([source.id, target.id]);
+    }
+    if (source.type === "task" && target.type === "issue") {
+      issueTaskPairs.push([target.id, source.id]);
+    }
+  }
+}
+
+for (const [issueId, taskId] of issueTaskPairs) {
+  const set = nodeToDirectTaskIds.get(issueId) || new Set();
+  set.add(taskId);
+  nodeToDirectTaskIds.set(issueId, set);
+}
+
+const adjacency = new Map();
+for (const node of graph.nodes) {
+  adjacency.set(node.id, []);
+}
+const traverseEdgeTypes = new Set(["belongs_to", "implements", "contains", "reviews", "merges", "modifies"]);
+for (const edge of graph.edges) {
+  if (!traverseEdgeTypes.has(edge.type)) continue;
+  if (!nodeMap.has(edge.source) || !nodeMap.has(edge.target)) continue;
+  const source = nodeMap.get(edge.source);
+  const target = nodeMap.get(edge.target);
+  if (!["task", "issue", "branch", "commit", "pull_request", "review", "merge"].includes(source.type)) continue;
+  if (!["task", "issue", "branch", "commit", "pull_request", "review", "merge"].includes(target.type)) continue;
+  adjacency.get(edge.source).push(edge.target);
+  adjacency.get(edge.target).push(edge.source);
+}
+
+let changed = true;
+while (changed) {
+  changed = false;
+  for (const [id, neighbors] of adjacency.entries()) {
+    const current = nodeToDirectTaskIds.get(id) || new Set();
+    if (current.size === 0) continue;
+    for (const neighbor of neighbors) {
+      const next = nodeToDirectTaskIds.get(neighbor) || new Set();
+      let before = next.size;
+      for (const taskId of current) next.add(taskId);
+      if (next.size !== before) {
+        nodeToDirectTaskIds.set(neighbor, next);
+        changed = true;
+      }
+    }
+  }
+}
+
+function getTasksForNode(nodeId) {
+  const set = nodeToDirectTaskIds.get(nodeId);
+  if (!set) return [];
+  return Array.from(set).filter((taskId) => taskMap.has(taskId) || graph.nodes.some((node) => node.id === taskId && node.type === "task"));
+}
+
+function inferRepoFromNode(nodeId, visited = new Set()) {
+  const node = nodeMap.get(nodeId);
+  if (!node) return null;
+  if (typeof node.repo === "string" && node.repo) return node.repo;
+  if (node.type === "repository" && node.id) return node.id;
+  if (visited.has(nodeId)) return null;
+  visited.add(nodeId);
+  for (const edge of graph.edges) {
+    if (edge.source === nodeId) {
+      const neighbor = nodeMap.get(edge.target);
+      if (neighbor && neighbor.type === "repository" && neighbor.repo) return neighbor.repo;
+    }
+    if (edge.target === nodeId) {
+      const neighbor = nodeMap.get(edge.source);
+      if (neighbor && neighbor.type === "repository" && neighbor.repo) return neighbor.repo;
+    }
+  }
+  return null;
+}
+
+const updatedTasks = existing.map((task) => ({ ...task }));
+const insertedTaskIds = [];
+
+function upsertTask(node) {
+  const existingTask = taskMap.get(node.id);
+  const taskRepos = uniqueArray([...(existingTask ? existingTask.repos || [] : []), node.repo, ...(inferTasksRepos(node.id, node.repo))]);
+  const notes = existingTask && typeof existingTask.notes === "string" ? existingTask.notes : "";
+  const linkedPrs = uniqueArray((existingTask ? existingTask.linked_prs || [] : []).filter(Boolean));
+  const dependencies = uniqueArray((existingTask ? existingTask.dependencies || [] : []).filter(Boolean));
+
+  const base = existingTask || {
+    id: node.id,
+    title: node.title,
+    status: parseStatusForTask(node.status),
+    priority: "medium",
+    repos: taskRepos,
+    notes: notes || `Imported from Nexus task ${node.id}`,
+    linked_prs: linkedPrs,
+    dependencies,
+  };
+
+  const updated = {
+    ...base,
+    title: base.title || node.title || existingTask?.title || "",
+    status: parseStatusForTask(node.status),
+    repos: taskRepos.filter(Boolean),
+    priority: base.priority || "medium",
+    metadata: {
+      ...(base.metadata || {}),
+      nexus: {
+        ...(base.metadata && base.metadata.nexus ? base.metadata.nexus : {}),
+        external_id: node.external_id || node.id,
+        last_seen: new Date().toISOString(),
+        raw_status: node.status,
+      },
+    },
+    notes: notes || base.notes,
+    linked_prs: linkedPrs,
+    dependencies,
+  };
+
+  if (!existingTask) {
+    insertedTaskIds.push(node.id);
+    updatedTasks.push(updated);
+    taskMap.set(node.id, updated);
+  } else {
+    Object.assign(existingTask, updated);
+  }
+}
+
+function inferTasksRepos(taskNodeId, directRepo) {
+  if (directRepo) return [directRepo];
+  const associated = getTasksForNode(taskNodeId);
+  if (associated.length === 0) return [];
+  const repos = [];
+  for (const taskId of associated) {
+    const taskNode = nodeMap.get(taskId);
+    if (taskNode && taskNode.repo) repos.push(taskNode.repo);
+  }
+  return repos;
+}
+
+for (const node of graph.nodes) {
+  if (node.type === "task") {
+    upsertTask(node);
+  }
+}
+
+function addDependencies(sourceNode, targetNode, type) {
+  const sourceTasks = getTasksForNode(sourceNode);
+  const targetTasks = getTasksForNode(targetNode);
+  if (sourceTasks.length === 0 || targetTasks.length === 0) return;
+
+  if (type === "depends_on") {
+    for (const sourceTaskId of sourceTasks) {
+      const task = taskMap.get(sourceTaskId);
+      if (!task) continue;
+      task.dependencies = uniqueArray([...(task.dependencies || []), ...targetTasks]);
+      task.metadata = {
+        ...(task.metadata || {}),
+        nexus: {
+          ...(task.metadata ? task.metadata.nexus : {}),
+          depends_on: [...(task.metadata && task.metadata.nexus ? task.metadata.nexus.depends_on || [] : []), ...targetTasks],
+        },
+      };
+    }
+  }
+
+  if (type === "blocks") {
+    for (const blockedTaskId of targetTasks) {
+      const task = taskMap.get(blockedTaskId);
+      if (!task) continue;
+      task.dependencies = uniqueArray([...(task.dependencies || []), ...sourceTasks]);
+      task.metadata = {
+        ...(task.metadata || {}),
+        nexus: {
+          ...(task.metadata ? task.metadata.nexus : {}),
+          blocks: [...(task.metadata && task.metadata.nexus ? task.metadata.nexus.blocks || [] : []), ...sourceTasks],
+        },
+      };
+    }
+  }
+}
+
+for (const edge of graph.edges) {
+  if (edge.type === "depends_on" || edge.type === "blocks") {
+    addDependencies(edge.source, edge.target, edge.type);
+  }
+}
+
+function addLinkedPr(task, prId) {
+  task.linked_prs = uniqueArray([...(task.linked_prs || []), prId]);
+}
+
+for (const edge of graph.edges) {
+  const source = nodeMap.get(edge.source);
+  const target = nodeMap.get(edge.target);
+  if (!source || !target) continue;
+
+  const sourceIsPr = source.type === "pull_request";
+  const targetIsPr = target.type === "pull_request";
+  const sourcePr = sourceIsPr ? source : null;
+  const targetPr = targetIsPr ? target : null;
+  const sourceTasks = sourceIsPr ? [] : getTasksForNode(source.id);
+  const targetTasks = targetIsPr ? [] : getTasksForNode(target.id);
+
+  if (sourcePr && targetTasks.length > 0) {
+    for (const taskId of targetTasks) addLinkedPr(taskMap.get(taskId), sourcePr.external_id || sourcePr.id);
+  }
+  if (targetPr && sourceTasks.length > 0) {
+    for (const taskId of sourceTasks) addLinkedPr(taskMap.get(taskId), targetPr.external_id || targetPr.id);
+  }
+}
+
+function setSupersedeRelation(sourceId, targetId) {
+  const sourceTasks = getTasksForNode(sourceId);
+  const targetTasks = getTasksForNode(targetId);
+  for (const targetTaskId of targetTasks) {
+    const targetTask = taskMap.get(targetTaskId);
+    if (!targetTask) continue;
+    targetTask.status = parseStatusForTask("cancelled");
+    targetTask.metadata = {
+      ...(targetTask.metadata || {}),
+      nexus: {
+        ...(targetTask.metadata ? targetTask.metadata.nexus : {}),
+        superseded_by: sourceTasks.length === 1 ? sourceTasks[0] : sourceTasks.join(","),
+      },
+    };
+  }
+}
+
+for (const edge of graph.edges) {
+  if (edge.type === "supersedes") {
+    setSupersedeRelation(edge.source, edge.target);
+  }
+}
+
+const existingDependencies = new Map();
+for (const dep of dependencyFile.data.dependencies || []) {
+  const key = `${dep.source}|${dep.target}|${dep.reason || ""}`;
+  existingDependencies.set(key, dep);
+}
+
+function addDependencyEdge(sourceNode, targetNode, reason) {
+  const sourceRepo = inferRepoFromNode(sourceNode);
+  const targetRepo = inferRepoFromNode(targetNode);
+  if (!sourceRepo || !targetRepo || sourceRepo === targetRepo) return;
+  const key = `${sourceRepo}|${targetRepo}|${reason}`;
+  existingDependencies.set(key, { source: sourceRepo, target: targetRepo, reason });
+}
+
+for (const edge of graph.edges) {
+  addDependencyEdge(edge.source, edge.target, edge.type);
+}
+
+const dependencyEntries = Array.from(existingDependencies.values())
+  .sort((a, b) => a.source.localeCompare(b.source) || a.target.localeCompare(b.target) || String(a.reason || "").localeCompare(String(b.reason || "")));
+
+dependencyFile.data = { dependencies: dependencyEntries };
+
+const now = new Date().toISOString();
+const linkedTasks = graph.edges
+  .filter((edge) => edge.type === "modifies" && nodeMap.get(edge.source)?.type === "pull_request" && nodeMap.get(edge.target)?.type === "task")
+  .map((edge) => `${edge.source}->${edge.target}`);
+const issueAffected = graph.nodes.filter((node) => node.type === "issue").map((node) => node.id);
+
+const decisionText = [
+  `## ${now}`,
+  "- **Task ID:** NEXUS-IMPORT",
+  `- **Decision:** Synchronized Mission Control with Git Nexus graph ${path.basename(input)}`,
+  "- **Rationale:** Git Nexus adapter import created/updated tasks, dependencies, linked PRs, and repository relationship map.",
+  `- **Affected repositories:** ${Array.from(knownRepos).join(", ") || "unknown"}`,
+  `- **Follow-up actions:** Review ${insertedTaskIds.length} imported task updates, ${issueAffected.length} issue nodes, ${linkedTasks.length} task->PR link paths, and dependency imports for correctness.`,
+  "",
+].join("\n");
+fs.appendFileSync(decisionsFile.path, `\n${decisionText}`, "utf8");
+
+writeJSON({ tasks: updatedTasks }, issuesFile.path);
+writeJSON(dependencyFile.data, dependencyFile.path);
+console.log(`imported ${insertedTaskIds.length} new tasks from ${path.basename(input)}`);
