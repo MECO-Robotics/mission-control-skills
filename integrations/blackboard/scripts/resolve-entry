@@ -1,7 +1,0 @@
-#!/usr/bin/env node
-const cli = require("../src/cli");
-
-const result = cli.commandResolveEntry(process.argv.slice(2));
-console.log(`entry_id=${result.entry.id}`);
-console.log(`board_id=${result.board.board_id}`);
-console.log(`status=${result.entry.status}`);

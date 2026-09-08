@@ -1,5 +1,0 @@
-#!/usr/bin/env node
-const cli = require("../src/cli");
-const result = cli.commandGenerateFixLoop(process.argv.slice(2));
-console.log(`output=${result.outputPath}`);
-console.log(`packages=${result.packages.length}`);

@@ -1,8 +1,0 @@
-#!/usr/bin/env node
-const cli = require("../src/cli");
-
-const result = cli.commandSummarizeBoard(process.argv.slice(2));
-console.log(`board_id=${result.board_id}`);
-console.log(`board_type=${result.board_type}`);
-console.log(`markdown=${result.output.markdown}`);
-console.log(`json=${result.output.json}`);

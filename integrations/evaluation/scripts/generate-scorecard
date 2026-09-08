@@ -1,5 +1,0 @@
-#!/usr/bin/env node
-const engine = require("../src/engine");
-const result = engine.generateScorecard(process.argv.slice(2));
-console.log(`score=${result.score}`);
-console.log(`output=${result.outputPath}`);

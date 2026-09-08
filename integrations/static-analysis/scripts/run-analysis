@@ -1,6 +1,0 @@
-#!/usr/bin/env node
-const cli = require("../src/cli");
-const result = cli.commandRunAnalysis(process.argv.slice(2));
-console.log(`findings=${result.findingCount}`);
-console.log(`new_findings=${result.newFindings}`);
-console.log(`result_dir=${result.resultDir}`);
