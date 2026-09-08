@@ -1559,6 +1559,11 @@ function validateGraph(options = {}) {
   const repoNodes = new Set();
   const repositoryPaths = new Map();
   const fileIndex = new Map();
+  for (const node of graph.nodes) {
+    if (node?.node_type === "repository") {
+      repositoryPaths.set(node.repository || node.id.replace(/^repository:/, ""), toPosix(node.path || "."));
+    }
+  }
 
   for (const node of graph.nodes) {
     if (!node || !node.id) {
@@ -1576,7 +1581,6 @@ function validateGraph(options = {}) {
 
     if (node.node_type === "repository") {
       repoNodes.add(node.id);
-      repositoryPaths.set(node.repository || node.id.replace(/^repository:/, ""), toPosix(node.path || "."));
     }
     if (!node.repository && node.node_type !== "repository") {
       failures.push(`missing repository on node: ${node.id}`);

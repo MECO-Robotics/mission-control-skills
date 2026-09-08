@@ -221,7 +221,7 @@ function fileSignature(filePath) {
   return stableId(filePath, stat.size, stat.mtimeMs);
 }
 
-function walkFiles(root, cfg, relBase = ".") {
+function walkFiles(root, cfg, relBase = ".", excludedRoot) {
   const base = path.resolve(root, relBase);
   const out = [];
   if (!fs.existsSync(base)) return out;
@@ -235,6 +235,7 @@ function walkFiles(root, cfg, relBase = ".") {
       const segments = childRel.split("/").map((p) => p);
       if (segments.some((seg) => skip.has(seg))) continue;
       const childAbs = path.join(abs, entry.name);
+      if (childAbs === excludedRoot) continue;
       if (entry.isDirectory()) {
         stack.push(childRel);
         continue;
@@ -348,14 +349,14 @@ function parseCodeRows(repository, relPath, content, taskId) {
   return rows;
 }
 
-function collectSourceRows(root, cfg) {
+function collectSourceRows(root, cfg, excludedRoot) {
   const records = [];
   const signatures = {};
   const repos = normalizeRepositoryEntries(root);
   const taskMap = mapTaskFiles(root, cfg);
 
   for (const repo of repos) {
-    const files = walkFiles(root, cfg, repo.path);
+    const files = walkFiles(root, cfg, repo.path, excludedRoot);
     for (const file of files) {
       if (fs.statSync(file.absolutePath).size > cfg.indexing.maxFileBytes) continue;
       const content = readTextSafe(file.absolutePath, cfg.indexing.maxFileBytes);
@@ -611,9 +612,9 @@ function collectGraphRows(root, cfg) {
   return { rows, signatures };
 }
 
-function collectAllRecords(root, cfg) {
+function collectAllRecords(root, cfg, excludedRoot) {
   const sources = [
-    collectSourceRows(root, cfg),
+    collectSourceRows(root, cfg, excludedRoot),
     collectTaskRows(root, cfg),
     collectDecisionRows(root, cfg),
     collectDependencyRows(root, cfg),
@@ -705,7 +706,7 @@ function buildSemanticIndex(options = {}) {
   const outputRoot = path.resolve(options.outputDir || options.indexRoot || path.join(repositoryRoot, cfg.paths.indexRoot));
   const fileName = options.indexFile || cfg.paths.indexFile || DEFAULT_INDEX_FILE;
   const profileName = options.profile || "coder";
-  const gathered = collectAllRecords(repositoryRoot, cfg);
+  const gathered = collectAllRecords(repositoryRoot, cfg, outputRoot);
   const records = withVectors(gathered.records, cfg);
 
   const byType = {};
@@ -751,7 +752,7 @@ function updateSemanticIndex(options = {}) {
   const cfg = loadConfig(options.configPath || DEFAULT_CONFIG_PATH);
   const outputRoot = path.resolve(options.outputDir || options.indexRoot || path.join(repositoryRoot, cfg.paths.indexRoot));
   const fileName = options.indexFile || cfg.paths.indexFile;
-  const next = collectAllRecords(repositoryRoot, cfg);
+  const next = collectAllRecords(repositoryRoot, cfg, outputRoot);
   const current = readJson(path.join(outputRoot, fileName));
   if (current && signaturesEqual(current.source_signatures || {}, next.signatures)) {
     return {
@@ -867,54 +868,37 @@ function toHybridResult(row, profileName) {
 
 function resolveCodeSearch(query, options = {}) {
   const engine = loadCodeSearch();
-  const normalizedQuery = String(query || "").trim();
-  const isExactQuery = normalizedQuery.length > 0;
-  if (!engine || typeof engine.searchSymbol !== "function") {
-    try {
-      const repositoryRoot = path.resolve(options.repositoryRoot || process.cwd());
-      const cfg = loadConfig(options.configPath || DEFAULT_CONFIG_PATH);
-      const indexRoot = path.resolve(options.indexRoot || options.outputDir || path.join(repositoryRoot, cfg.paths.indexRoot));
-      const indexFile = options.indexFile || cfg.paths.indexFile || DEFAULT_INDEX_FILE;
-      const index = loadIndex(indexRoot, indexFile);
-      const qLower = normalizedQuery.toLowerCase();
-      return (Array.isArray(index.records) ? index.records : [])
-        .filter((row) => row.source_type === "code_symbols" && String(row.symbol || "").toLowerCase() === qLower)
-        .slice(0, options.limit || 20)
-        .map((row) => ({
-          id: stableId("symbols", row.repository || "", row.path || "", row.symbol || "", qLower),
-          score: Number(row.score || 0.98),
-          source_type: "code_symbols",
-          repository: row.repository,
-          path: row.path,
-          symbol: row.symbol,
-          task_id: row.task_id || "",
-          snippet: row.text || "",
-          reason: "exact symbol match from local fallback index",
-          source: "code-search",
-          query,
-        }));
-    } catch {
-      return [];
-    }
-  }
+  let rows = [];
   try {
-    const rows = engine.searchSymbol({ repositoryRoot: options.repositoryRoot, symbolName: query, limit: options.limit || 20, preferSourcebot: true, repository: options.repository }).results || [];
-    return rows.map((row) => ({
-      id: stableId("symbols", row.repository || "", row.file || "", row.symbol || ""),
-      score: Number(row.score || 0.95),
-      source_type: "code_symbols",
-      repository: row.repository,
-      path: row.file,
-      symbol: row.symbol,
-      task_id: "",
-      snippet: row.snippet || "",
-      reason: "exact symbol match from code-search",
-      source: "code-search",
-      query,
-    }));
+    rows = engine?.searchSymbol?.({ repositoryRoot: options.repositoryRoot, symbolName: query, limit: options.limit || 20, preferSourcebot: true, repository: options.repository }).results || [];
   } catch {
-    return [];
+    // An unavailable optional backend must not hide indexed exact symbols.
   }
+  if (!rows.length) {
+    const repositoryRoot = path.resolve(options.repositoryRoot || process.cwd());
+    const cfg = loadConfig(options.configPath || DEFAULT_CONFIG_PATH);
+    const indexRoot = path.resolve(options.indexRoot || options.outputDir || path.join(repositoryRoot, cfg.paths.indexRoot));
+    const index = loadIndex(indexRoot, options.indexFile || cfg.paths.indexFile || DEFAULT_INDEX_FILE);
+    const qLower = String(query || "").trim().toLowerCase();
+    rows = (index.records || [])
+      .filter((row) => row.source_type === "code_symbols" && String(row.symbol || "").toLowerCase() === qLower)
+      .filter((row) => !options.repository || row.repository === options.repository)
+      .slice(0, options.limit || 20)
+      .map((row) => ({ ...row, file: row.path, snippet: row.text }));
+  }
+  return rows.map((row) => ({
+    id: stableId("symbols", row.repository || "", row.file || "", row.symbol || ""),
+    score: Number(row.score || 0.98),
+    source_type: "code_symbols",
+    repository: row.repository,
+    path: row.file,
+    symbol: row.symbol,
+    task_id: row.task_id || "",
+    snippet: row.snippet || "",
+    reason: "exact symbol match from code-search",
+    source: "code-search",
+    query,
+  }));
 }
 
 function resolveGraphMatches(query, options = {}) {
@@ -1029,7 +1013,7 @@ function hybridSemanticSearch(options = {}) {
   const dedup = new Map();
   for (const row of merged) {
     const key = `${row.source_type}|${row.repository}|${row.path}|${row.symbol}`;
-    if (!dedup.has(key) || dedup.get(key).rankScore < row.rankScore) dedup.set(key, row);
+    if (!dedup.has(key) || row.source === "code-search" || (dedup.get(key).source !== "code-search" && dedup.get(key).rankScore < row.rankScore)) dedup.set(key, row);
   }
   const ranked = Array.from(dedup.values()).sort((a, b) => b.rankScore - a.rankScore || a.path.localeCompare(b.path));
   return {

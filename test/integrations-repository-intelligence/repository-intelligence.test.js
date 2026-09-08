@@ -128,7 +128,7 @@ test("semantic-search finds similar implementations", () => {
     assert.equal(Array.isArray(result.results), true);
     assert.equal(result.results.length > 0, true);
     assert.equal(result.mode, "keyword-fallback");
-    assert.equal(result.results[0].symbol.includes("MC-101") || result.results[0].file.includes("auth.ts"), true);
+    assert.equal(result.results[0].symbol?.includes("MC-101") || result.results[0].file.includes("auth.ts"), true);
   } finally {
     cleanup(root);
   }
@@ -153,6 +153,7 @@ test("find_context_for_task includes findings", () => {
     intelligence.buildIndexes({ repositoryRoot: root, indexRoot, profile: "reviewer" });
     const result = intelligence.find_context_for_task({
       repositoryRoot: root,
+      indexRoot,
       taskId: "MC-101",
       profile: "reviewer",
       limit: 30,

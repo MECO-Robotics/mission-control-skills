@@ -257,7 +257,7 @@ function tokenizeForSearch(input) {
 
 function tokenizeCamel(text) {
   const tokens = [];
-  for (const token of tokenizeForSearch(text)) {
+  for (const token of String(text || "").match(/[a-zA-Z0-9_]+/g) || []) {
     const chunks = token.split(/(?=[A-Z])|_/);
     for (const chunk of chunks) {
       const lower = chunk.toLowerCase();
@@ -926,7 +926,7 @@ function semanticSearch(options = {}) {
   for (const item of all) {
     const targetSet = new Set(item.tokenSet || tokenSet(item.content || `${item.title || ""} ${item.snippet || ""}`));
     const semanticScore = overlapScore(qTokens, targetSet);
-    const phraseBonus = item.content && String(item.content).toLowerCase().includes(query.toLowerCase()) ? 0.25 : 0;
+    const phraseBonus = item.content && String(item.content).replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().includes(query.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase()) ? 0.25 : 0;
     const exactTitle = exactMatchScore(query, item.title || item.file || item.id);
     const score = parseFloat(Math.min(1, semanticScore * 0.9 + phraseBonus + exactTitle * 0.1).toFixed(4));
     if (score > 0) {
@@ -1453,10 +1453,10 @@ function find_context_for_task(options = {}) {
   const root = path.resolve(options.repositoryRoot || process.cwd());
   const profile = normalizeProfile((loadProfiles()[options.profile] || loadProfiles().coder || {}));
 
-  const taskMatches = taskSearch({ repositoryRoot: root, query: taskId, limit });
-  const depMatches = dependencySearch({ repositoryRoot: root, query: taskId, limit: Math.max(5, Math.ceil(limit / 3)) });
-  const semanticMatches = semanticSearch({ repositoryRoot: root, query: taskId, limit: Math.max(5, Math.ceil(limit / 2)) });
-  const archMatches = architectureSearch({ repositoryRoot: root, query: taskId, limit: Math.max(5, Math.ceil(limit / 2)) });
+  const taskMatches = taskSearch({ repositoryRoot: root, indexRoot: options.indexRoot, query: taskId, limit });
+  const depMatches = dependencySearch({ repositoryRoot: root, indexRoot: options.indexRoot, query: taskId, limit: Math.max(5, Math.ceil(limit / 3)) });
+  const semanticMatches = semanticSearch({ repositoryRoot: root, indexRoot: options.indexRoot, query: taskId, limit: Math.max(5, Math.ceil(limit / 2)) });
+  const archMatches = architectureSearch({ repositoryRoot: root, indexRoot: options.indexRoot, query: taskId, limit: Math.max(5, Math.ceil(limit / 2)) });
   const boardMatches = queryBlackboardBackend({
     repositoryRoot: root,
     query: taskId,
