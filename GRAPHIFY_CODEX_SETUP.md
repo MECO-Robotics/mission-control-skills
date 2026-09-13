@@ -81,6 +81,12 @@ graphify extract . --backend openai --model "$MODEL" \
   --api-timeout 900 --no-cluster --no-viz
 ```
 
+If the local llama.cpp build rejects the larger completion budget with HTTP
+400, retry with `--token-budget 1024 --max-concurrency 1`. This fallback was
+verified against the two-GPU relay and still refreshes the semantic cache;
+increase the budget only after confirming the server's context and output
+limits.
+
 Verify both servers before starting a long run:
 
 ```bash
