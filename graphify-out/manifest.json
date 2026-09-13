@@ -1,0 +1,404 @@
+{
+  ".mission-control/dependency-map.json": {
+    "mtime": 1788820545.7719638,
+    "seen": 1789266124.6491907,
+    "ast_hash": "327fd1b5ccdc2f5b3c22f4ada893fb61",
+    "semantic_hash": "327fd1b5ccdc2f5b3c22f4ada893fb61"
+  },
+  ".mission-control/global-issues.json": {
+    "mtime": 1788820545.7719638,
+    "seen": 1789266124.649204,
+    "ast_hash": "083782bd48790ea95922c8a46b105e5f",
+    "semantic_hash": "083782bd48790ea95922c8a46b105e5f"
+  },
+  ".mission-control/repo-registry.json": {
+    "mtime": 1788820545.7719638,
+    "seen": 1789266124.6492097,
+    "ast_hash": "131c75e731422069ceb9fb3be00dfbbd",
+    "semantic_hash": "131c75e731422069ceb9fb3be00dfbbd"
+  },
+  "integrations/git-nexus/fixtures/sample-nexus-graph.json": {
+    "mtime": 1788820545.7731473,
+    "seen": 1789266124.6492138,
+    "ast_hash": "b8932eeda2402158ac54c1d37800b658",
+    "semantic_hash": "b8932eeda2402158ac54c1d37800b658"
+  },
+  "integrations/git-nexus/schema.json": {
+    "mtime": 1788820545.7731473,
+    "seen": 1789266124.6492171,
+    "ast_hash": "4613482a15d72065c2277fb6c0272329",
+    "semantic_hash": "4613482a15d72065c2277fb6c0272329"
+  },
+  "integrations/git-nexus/scripts/_nexus-lib.js": {
+    "mtime": 1788820545.7731473,
+    "seen": 1789266124.6492195,
+    "ast_hash": "bf00cdf0f5d03a56f473592083bbffea",
+    "semantic_hash": "bf00cdf0f5d03a56f473592083bbffea"
+  },
+  "integrations/git-nexus/scripts/export-nexus-data": {
+    "mtime": 1788820545.7736602,
+    "seen": 1789266124.6492229,
+    "ast_hash": "a68352837300e7bf4f03ef90b8b69141",
+    "semantic_hash": "a68352837300e7bf4f03ef90b8b69141"
+  },
+  "integrations/git-nexus/scripts/import-nexus-data": {
+    "mtime": 1788820545.7736602,
+    "seen": 1789266124.6492257,
+    "ast_hash": "f190fe74be2564a627e82aad3b2ef28e",
+    "semantic_hash": "f190fe74be2564a627e82aad3b2ef28e"
+  },
+  "integrations/git-nexus/scripts/normalize-nexus-data": {
+    "mtime": 1788820545.7736602,
+    "seen": 1789266124.6492286,
+    "ast_hash": "5d9a7d883dbb6a70e2bc0492d7c90305",
+    "semantic_hash": "5d9a7d883dbb6a70e2bc0492d7c90305"
+  },
+  "integrations/git-nexus/scripts/validate-nexus-data": {
+    "mtime": 1788820545.7736602,
+    "seen": 1789266124.6492312,
+    "ast_hash": "f5af2cf3f9234a49e86eb76b1e930066",
+    "semantic_hash": "f5af2cf3f9234a49e86eb76b1e930066"
+  },
+  "integrations/git-wiki/scripts/_wiki-lib.js": {
+    "mtime": 1788820545.775205,
+    "seen": 1789266124.6492343,
+    "ast_hash": "ce2104673ee8fb07a09efa8dd667ef34",
+    "semantic_hash": "ce2104673ee8fb07a09efa8dd667ef34"
+  },
+  "integrations/git-wiki/scripts/generate-wiki-pages": {
+    "mtime": 1788820545.775205,
+    "seen": 1789266124.6492374,
+    "ast_hash": "ce87aae729225a59cdc76aa1358b722b",
+    "semantic_hash": "ce87aae729225a59cdc76aa1358b722b"
+  },
+  "integrations/git-wiki/scripts/refresh-architecture-page": {
+    "mtime": 1788820545.775205,
+    "seen": 1789266124.6492405,
+    "ast_hash": "196e81083fadb7088ca61ecd60f693fb",
+    "semantic_hash": "196e81083fadb7088ca61ecd60f693fb"
+  },
+  "integrations/git-wiki/scripts/refresh-decision-log-page": {
+    "mtime": 1788820545.775205,
+    "seen": 1789266124.6492434,
+    "ast_hash": "005b263f6e6f1e70892e0fe65a538820",
+    "semantic_hash": "005b263f6e6f1e70892e0fe65a538820"
+  },
+  "integrations/git-wiki/scripts/refresh-dependency-page": {
+    "mtime": 1788820545.775205,
+    "seen": 1789266124.6492462,
+    "ast_hash": "94c5acdf74fdd59c7717aee38bdec6ad",
+    "semantic_hash": "94c5acdf74fdd59c7717aee38bdec6ad"
+  },
+  "integrations/git-wiki/scripts/refresh-task-index-page": {
+    "mtime": 1788820545.775205,
+    "seen": 1789266124.649249,
+    "ast_hash": "0b1fd6036fd7ed6a600d94896dfb15d0",
+    "semantic_hash": "0b1fd6036fd7ed6a600d94896dfb15d0"
+  },
+  "integrations/git-wiki/scripts/validate-wiki-pages": {
+    "mtime": 1788820545.775205,
+    "seen": 1789266124.649252,
+    "ast_hash": "39dde65e9ada86e2287bb03aa0cc20c1",
+    "semantic_hash": "39dde65e9ada86e2287bb03aa0cc20c1"
+  },
+  "integrations/git-wiki/wiki-config.json": {
+    "mtime": 1788820545.775205,
+    "seen": 1789266124.6492543,
+    "ast_hash": "3a7d80c103a6e1ad6d3d9b43d067a201",
+    "semantic_hash": "3a7d80c103a6e1ad6d3d9b43d067a201"
+  },
+  "scripts/generate-wiki": {
+    "mtime": 1788820545.7764697,
+    "seen": 1789266124.6492574,
+    "ast_hash": "1d744d190b3982a61bd4c5b4060722ca",
+    "semantic_hash": "1d744d190b3982a61bd4c5b4060722ca"
+  },
+  "scripts/init": {
+    "mtime": 1788820545.776926,
+    "seen": 1789266124.64926,
+    "ast_hash": "fb711d9e26a05af8f11380decf698242",
+    "semantic_hash": "fb711d9e26a05af8f11380decf698242"
+  },
+  "scripts/log-decision": {
+    "mtime": 1788820545.776926,
+    "seen": 1789266124.649263,
+    "ast_hash": "0e47ebdbc558c81262f1f5936802ef3e",
+    "semantic_hash": "0e47ebdbc558c81262f1f5936802ef3e"
+  },
+  "scripts/update-task": {
+    "mtime": 1788820545.776926,
+    "seen": 1789266124.6492658,
+    "ast_hash": "42be828bd62a989f5b3b7b68e87c6a79",
+    "semantic_hash": "42be828bd62a989f5b3b7b68e87c6a79"
+  },
+  "scripts/validate-state": {
+    "mtime": 1788820545.776926,
+    "seen": 1789266124.6492693,
+    "ast_hash": "91f33b3e9070d6c27ba6fccae15f691a",
+    "semantic_hash": "91f33b3e9070d6c27ba6fccae15f691a"
+  },
+  ".mission-control/architecture-wiki.md": {
+    "mtime": 1788820545.771205,
+    "seen": 1789266124.649272,
+    "ast_hash": "8560324b220bbbde48f6f0c1b0dbc39b",
+    "semantic_hash": "8560324b220bbbde48f6f0c1b0dbc39b"
+  },
+  ".mission-control/cross-repo-decisions.md": {
+    "mtime": 1788820545.7719638,
+    "seen": 1789266124.6492746,
+    "ast_hash": "7154d39835408a173f45bfe0b1e45fa4",
+    "semantic_hash": "7154d39835408a173f45bfe0b1e45fa4"
+  },
+  ".mission-control/roadmap.md": {
+    "mtime": 1788820545.7719638,
+    "seen": 1789266124.6492774,
+    "ast_hash": "efb1e509df35c88844b3646a0a8bdd88",
+    "semantic_hash": "efb1e509df35c88844b3646a0a8bdd88"
+  },
+  "AGENTS.md": {
+    "mtime": 1788820545.7722049,
+    "seen": 1789266124.6492805,
+    "ast_hash": "f6dede3749b0141e65e6347c13e94172",
+    "semantic_hash": "f6dede3749b0141e65e6347c13e94172"
+  },
+  "README.md": {
+    "mtime": 1788820545.7722049,
+    "seen": 1789266124.6492832,
+    "ast_hash": "04402b2ff996b59f574b72644a1dfbbf",
+    "semantic_hash": "04402b2ff996b59f574b72644a1dfbbf"
+  },
+  "integrations/git-nexus/README.md": {
+    "mtime": 1788820545.772965,
+    "seen": 1789266124.6492858,
+    "ast_hash": "dd8dbca3ce55a3d63d378ff4ac0a0426",
+    "semantic_hash": "dd8dbca3ce55a3d63d378ff4ac0a0426"
+  },
+  "integrations/git-wiki/README.md": {
+    "mtime": 1788820545.774205,
+    "seen": 1789266124.6492887,
+    "ast_hash": "f28a984e677d0af0aa8429098bda9c15",
+    "semantic_hash": "f28a984e677d0af0aa8429098bda9c15"
+  },
+  "integrations/git-wiki/fixtures/sample-wiki-output/agent-workflow.md": {
+    "mtime": 1788820545.7745686,
+    "seen": 1789266124.6492915,
+    "ast_hash": "1d04c105efe62eca8b66a865b7d981e5",
+    "semantic_hash": "1d04c105efe62eca8b66a865b7d981e5"
+  },
+  "integrations/git-wiki/fixtures/sample-wiki-output/architecture.md": {
+    "mtime": 1788820545.7746937,
+    "seen": 1789266124.649302,
+    "ast_hash": "9dddbff703a499791f6a1aee4fdfae03",
+    "semantic_hash": "9dddbff703a499791f6a1aee4fdfae03"
+  },
+  "integrations/git-wiki/fixtures/sample-wiki-output/decision-log.md": {
+    "mtime": 1788820545.7746937,
+    "seen": 1789266124.649305,
+    "ast_hash": "be3440638a1574cacddfd5503e3d5294",
+    "semantic_hash": "be3440638a1574cacddfd5503e3d5294"
+  },
+  "integrations/git-wiki/fixtures/sample-wiki-output/dependency-map.md": {
+    "mtime": 1788820545.7746937,
+    "seen": 1789266124.6493077,
+    "ast_hash": "2913a4fc4f5121862e78462bfc5bddbf",
+    "semantic_hash": "2913a4fc4f5121862e78462bfc5bddbf"
+  },
+  "integrations/git-wiki/fixtures/sample-wiki-output/index.md": {
+    "mtime": 1788820545.7746937,
+    "seen": 1789266124.6493104,
+    "ast_hash": "20d0f32134aa65b7015212431b8c6873",
+    "semantic_hash": "20d0f32134aa65b7015212431b8c6873"
+  },
+  "integrations/git-wiki/fixtures/sample-wiki-output/release-workflow.md": {
+    "mtime": 1788820545.7746937,
+    "seen": 1789266124.649313,
+    "ast_hash": "7a4eb5eb932a766373bf17348f453615",
+    "semantic_hash": "7a4eb5eb932a766373bf17348f453615"
+  },
+  "integrations/git-wiki/fixtures/sample-wiki-output/repositories.md": {
+    "mtime": 1788820545.7746937,
+    "seen": 1789266124.6493158,
+    "ast_hash": "ba4e43836417477fbf7447d85b411a1f",
+    "semantic_hash": "ba4e43836417477fbf7447d85b411a1f"
+  },
+  "integrations/git-wiki/fixtures/sample-wiki-output/review-workflow.md": {
+    "mtime": 1788820545.7746937,
+    "seen": 1789266124.6493185,
+    "ast_hash": "2e378b46aae22545d0ec8cdfb12c1fca",
+    "semantic_hash": "2e378b46aae22545d0ec8cdfb12c1fca"
+  },
+  "integrations/git-wiki/fixtures/sample-wiki-output/task-index.md": {
+    "mtime": 1788820545.7746937,
+    "seen": 1789266124.6493213,
+    "ast_hash": "b16572a3c7a036f0896c823c1359f13b",
+    "semantic_hash": "b16572a3c7a036f0896c823c1359f13b"
+  },
+  "prompts/architect.md": {
+    "mtime": 1788820545.7762048,
+    "seen": 1789266124.6493237,
+    "ast_hash": "8042369543fbe600a36127bd6b70dcfa",
+    "semantic_hash": "8042369543fbe600a36127bd6b70dcfa"
+  },
+  "prompts/coder.md": {
+    "mtime": 1788820545.7764697,
+    "seen": 1789266124.6493266,
+    "ast_hash": "34d07e647717fe37236d865dd16b8621",
+    "semantic_hash": "34d07e647717fe37236d865dd16b8621"
+  },
+  "prompts/cross-repo-change.md": {
+    "mtime": 1788820545.7764697,
+    "seen": 1789266124.6493292,
+    "ast_hash": "f1c2ce3ecd9cc278dbc3335320b28dc0",
+    "semantic_hash": "f1c2ce3ecd9cc278dbc3335320b28dc0"
+  },
+  "prompts/maintainer.md": {
+    "mtime": 1788820545.7764697,
+    "seen": 1789266124.6493323,
+    "ast_hash": "940f058287cc3ee6049d01be77dbcff3",
+    "semantic_hash": "940f058287cc3ee6049d01be77dbcff3"
+  },
+  "prompts/reviewer.md": {
+    "mtime": 1788820545.7764697,
+    "seen": 1789266124.6493368,
+    "ast_hash": "d6c3ea4d2eb08023e5041ee02d465fbe",
+    "semantic_hash": "d6c3ea4d2eb08023e5041ee02d465fbe"
+  },
+  "skills/api-review/SKILL.md": {
+    "mtime": 1788820545.7774074,
+    "seen": 1789266124.6493397,
+    "ast_hash": "bbf6c94faef3cd98a57051ee52bd3559",
+    "semantic_hash": "bbf6c94faef3cd98a57051ee52bd3559"
+  },
+  "skills/app-architecture/SKILL.md": {
+    "mtime": 1788820545.7774074,
+    "seen": 1789266124.6493425,
+    "ast_hash": "b157ec3190b18e17bbed09c746e1c89c",
+    "semantic_hash": "b157ec3190b18e17bbed09c746e1c89c"
+  },
+  "skills/documentation-check/SKILL.md": {
+    "mtime": 1788820545.7774074,
+    "seen": 1789266124.649345,
+    "ast_hash": "3ac3c7a1ed6cc6a51c6d46335b640bac",
+    "semantic_hash": "3ac3c7a1ed6cc6a51c6d46335b640bac"
+  },
+  "skills/frc-domain/SKILL.md": {
+    "mtime": 1788820545.7774074,
+    "seen": 1789266124.6493475,
+    "ast_hash": "5fae434bcc52b0cb6ca34001cd85cf33",
+    "semantic_hash": "5fae434bcc52b0cb6ca34001cd85cf33"
+  },
+  "skills/github-pr-publish-review-loop/SKILL.md": {
+    "mtime": 1788820545.7774074,
+    "seen": 1789266124.6493504,
+    "ast_hash": "f5e750c13a44137cf3222b1215a59900",
+    "semantic_hash": "f5e750c13a44137cf3222b1215a59900"
+  },
+  "skills/github-project-management/SKILL.md": {
+    "mtime": 1788820545.778205,
+    "seen": 1789266124.6493537,
+    "ast_hash": "470367c3fe8a99faeb32620e4f61ed46",
+    "semantic_hash": "470367c3fe8a99faeb32620e4f61ed46"
+  },
+  "skills/implementation.md": {
+    "mtime": 1788820545.778205,
+    "seen": 1789266124.6493566,
+    "ast_hash": "6e12cce7a5ca39beb698bb6abec5b727",
+    "semantic_hash": "6e12cce7a5ca39beb698bb6abec5b727"
+  },
+  "skills/issue-planning.md": {
+    "mtime": 1788820545.778205,
+    "seen": 1789266124.6493716,
+    "ast_hash": "e04fbdad7771c194528e54feeaa1e09c",
+    "semantic_hash": "e04fbdad7771c194528e54feeaa1e09c"
+  },
+  "skills/meco-writing-style/SKILL.md": {
+    "mtime": 1788820545.778205,
+    "seen": 1789266124.6493745,
+    "ast_hash": "0a90c75ef355685ff5793087a6de3a88",
+    "semantic_hash": "0a90c75ef355685ff5793087a6de3a88"
+  },
+  "skills/release-coordination.md": {
+    "mtime": 1788820545.778205,
+    "seen": 1789266124.649377,
+    "ast_hash": "0cb5958259fa6848d25b6d331b3d1372",
+    "semantic_hash": "0cb5958259fa6848d25b6d331b3d1372"
+  },
+  "skills/review-loop.md": {
+    "mtime": 1788820545.778205,
+    "seen": 1789266124.6493797,
+    "ast_hash": "e00b32598985d9de024806ab15bed47c",
+    "semantic_hash": "e00b32598985d9de024806ab15bed47c"
+  },
+  "skills/ui-review/SKILL.md": {
+    "mtime": 1788820545.778205,
+    "seen": 1789266124.6493826,
+    "ast_hash": "170d4a4ccdc341019a2b4c23d18db139",
+    "semantic_hash": "170d4a4ccdc341019a2b4c23d18db139"
+  },
+  "skills/wiki-refresh.md": {
+    "mtime": 1788820545.778205,
+    "seen": 1789266124.6493857,
+    "ast_hash": "b34084f439be2f2054e21c9feaae78e7",
+    "semantic_hash": "b34084f439be2f2054e21c9feaae78e7"
+  },
+  "skills/worktree-default/SKILL.md": {
+    "mtime": 1788820545.778205,
+    "seen": 1789266124.6493886,
+    "ast_hash": "5190a8576451ea8ef94bafec3e193e1c",
+    "semantic_hash": "5190a8576451ea8ef94bafec3e193e1c"
+  },
+  "wiki/agent-workflow.md": {
+    "mtime": 1788820545.778205,
+    "seen": 1789266124.6493914,
+    "ast_hash": "1d04c105efe62eca8b66a865b7d981e5",
+    "semantic_hash": "1d04c105efe62eca8b66a865b7d981e5"
+  },
+  "wiki/architecture.md": {
+    "mtime": 1788820545.7792048,
+    "seen": 1789266124.6493948,
+    "ast_hash": "9dddbff703a499791f6a1aee4fdfae03",
+    "semantic_hash": "9dddbff703a499791f6a1aee4fdfae03"
+  },
+  "wiki/decision-log.md": {
+    "mtime": 1788820545.7792048,
+    "seen": 1789266124.6493971,
+    "ast_hash": "be3440638a1574cacddfd5503e3d5294",
+    "semantic_hash": "be3440638a1574cacddfd5503e3d5294"
+  },
+  "wiki/dependency-map.md": {
+    "mtime": 1788820545.7792048,
+    "seen": 1789266124.6494,
+    "ast_hash": "2913a4fc4f5121862e78462bfc5bddbf",
+    "semantic_hash": "2913a4fc4f5121862e78462bfc5bddbf"
+  },
+  "wiki/index.md": {
+    "mtime": 1788820545.7792048,
+    "seen": 1789266124.6494026,
+    "ast_hash": "20d0f32134aa65b7015212431b8c6873",
+    "semantic_hash": "20d0f32134aa65b7015212431b8c6873"
+  },
+  "wiki/release-workflow.md": {
+    "mtime": 1788820545.7792048,
+    "seen": 1789266124.649406,
+    "ast_hash": "7a4eb5eb932a766373bf17348f453615",
+    "semantic_hash": "7a4eb5eb932a766373bf17348f453615"
+  },
+  "wiki/repositories.md": {
+    "mtime": 1788820545.7792048,
+    "seen": 1789266124.649409,
+    "ast_hash": "ba4e43836417477fbf7447d85b411a1f",
+    "semantic_hash": "ba4e43836417477fbf7447d85b411a1f"
+  },
+  "wiki/review-workflow.md": {
+    "mtime": 1788820545.7792048,
+    "seen": 1789266124.6494117,
+    "ast_hash": "2e378b46aae22545d0ec8cdfb12c1fca",
+    "semantic_hash": "2e378b46aae22545d0ec8cdfb12c1fca"
+  },
+  "wiki/task-index.md": {
+    "mtime": 1788820545.7792048,
+    "seen": 1789266124.6494143,
+    "ast_hash": "b16572a3c7a036f0896c823c1359f13b",
+    "semantic_hash": "b16572a3c7a036f0896c823c1359f13b"
+  }
+}
