@@ -16,7 +16,7 @@ When changing an app-facing skill, inspect its affected app consumers and verify
 
 ## Required AI workflow evidence
 
-Every change must name the AI skill used and include Aislop validation evidence in its pull request. If Aislop is unavailable, record that fact and the reason; do not claim the check passed.
+Every AI-assisted change must use the Moyu skill and name it in its pull request. Every pull request is gated by the Aislop CI check (`npx --yes aislop@latest ci`); do not claim validation passed without its result.
 
 ## Branches and review
 
