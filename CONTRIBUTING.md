@@ -4,7 +4,7 @@ This is the canonical shared contributor workflow for Mission Control. Applicati
 
 ## Setup and validation
 
-Use Git to edit and distribute the shared Markdown skills. There is no package install, executable tool suite or service to initialize.
+Use Git to edit and distribute the shared Markdown skills. Enable the repository-managed local gates once per checkout with `git config core.hooksPath .githooks`.
 
 For changes, check relative links, documented commands and skill front matter (`name` and `description`), then run:
 
@@ -16,7 +16,7 @@ When changing an app-facing skill, inspect its affected app consumers and verify
 
 ## Required AI workflow evidence
 
-Every AI-assisted change must use the Moyu skill and name it in its pull request. Every pull request is gated by the Aislop CI check (`npx --yes aislop@latest ci`); do not claim validation passed without its result.
+Every AI-assisted change must use the Moyu skill and record a `Moyu-Skill:` commit trailer. Local commits run Aislop through `npx --yes aislop@latest ci`, and every pull request is gated by the same check; do not claim validation passed without its result.
 
 ## Branches and review
 
