@@ -14,6 +14,10 @@ git diff --check
 
 When changing an app-facing skill, inspect its affected app consumers and verify that the existing sync command still imports the `skills/` directory. Do not add runtime tests for removed tooling or repeat application suites for unchanged application code.
 
+## Required AI workflow evidence
+
+Every change must name the AI skill used and include Aislop validation evidence in its pull request. If Aislop is unavailable, record that fact and the reason; do not claim the check passed.
+
 ## Branches and review
 
 - Keep base checkouts read-only apart from fetches and worktree creation. Implement in a dedicated `feature/*` or `fix/*` worktree based on current `origin/development`.
