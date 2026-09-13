@@ -10,3 +10,4 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the shared contributor workflow an
 - Keep shared skills as ordinary committed files. Imported app copies are optional; using the shared skills requires no initialization.
 - Delegate only when authorized, with disjoint write scopes; integrate and verify centrally.
 - Preserve unrelated work. Report actual validation, unrun checks and remaining blockers without substituting automated comments for required approvals.
+- Before making any code or configuration modification, invoke the Moyu skill and apply its scope checklist. This is mandatory for every LLM-assisted modification, regardless of size.
