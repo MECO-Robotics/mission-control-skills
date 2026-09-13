@@ -60,24 +60,24 @@ HOST=127.0.0.1
 RELAY_HOST=127.0.0.1
 
 setsid "$SERVER" -m "$MODEL" --mmproj "$MMPROJ" --device Vulkan0 \
-  --split-mode none -ngl 999 -c 16384 -np 1 \
+  --split-mode none -ngl 999 -c 32768 -np 1 \
   --reasoning off --temp 0 --seed 42 --host "$HOST" --port 8083 \
   >/tmp/graphify-gpu0.log 2>&1 < /dev/null &
 
 setsid "$SERVER" -m "$MODEL" --mmproj "$MMPROJ" --device Vulkan1 \
-  --split-mode none -ngl 999 -c 16384 -np 1 \
+  --split-mode none -ngl 999 -c 32768 -np 1 \
   --reasoning off --temp 0 --seed 42 --host "$HOST" --port 8084 \
   >/tmp/graphify-gpu1.log 2>&1 < /dev/null &
 ```
 
-Send requests through a round-robin OpenAI-compatible relay at port 8085 so concurrent Graphify chunks use both instances. Configure the relay to forward to `${HOST}:8083` and `${HOST}:8084`; Graphify should address only `${RELAY_HOST}:8085`. Keep `temperature=0` and `seed=42` for repeatable extraction. Use `--max-concurrency 4` for normal throughput; reduce it to `2` or `1` if either server becomes unstable. A 16,000-token per-chunk budget is a useful high-quality setting:
+Send requests through a round-robin OpenAI-compatible relay at port 8085 so concurrent Graphify chunks use both instances. Configure the relay to forward to `${HOST}:8083` and `${HOST}:8084`; Graphify should address only `${RELAY_HOST}:8085`. The relay must set `response_format={"type":"json_object"}` for llama.cpp structured extraction. Keep `temperature=0` and `seed=42` for repeatable extraction. Use `--max-concurrency 4` for normal throughput; reduce it to `2` or `1` if either server becomes unstable. A 32,768-token context and per-chunk budget is the hardware maximum validated on this host:
 
 ```bash
 OPENAI_API_KEY=local \
 OPENAI_BASE_URL="http://${RELAY_HOST}:8085/v1" \
 OPENAI_MODEL="$MODEL" \
 graphify extract . --backend openai --model "$MODEL" \
-  --mode deep --token-budget 16000 --max-concurrency 4 \
+  --mode deep --token-budget 32768 --max-concurrency 4 \
   --api-timeout 900 --no-cluster --no-viz
 ```
 
