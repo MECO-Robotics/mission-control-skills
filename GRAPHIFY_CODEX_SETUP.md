@@ -53,19 +53,26 @@ This applies equally to web, backend, mobile, infrastructure, and shared package
 For local semantic extraction with two GPUs, run one independent `llama-server` instance per GPU. Do not layer-split one model across both GPUs. Set these variables for the host before starting the servers:
 
 ```bash
-MODEL=/absolute/path/to/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf
-MMPROJ=/absolute/path/to/mmproj-gemma-4-26B-A4B-it-BF16.gguf
+MODEL=/absolute/path/to/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf
+MTP=/absolute/path/to/mtp-gemma-4-26B-A4B-it-Q4_0.gguf
+MMPROJ=/absolute/path/to/mmproj-BF16.gguf
 SERVER=/absolute/path/to/llama-server
 HOST=127.0.0.1
 RELAY_HOST=127.0.0.1
 
 setsid "$SERVER" -m "$MODEL" --mmproj "$MMPROJ" --device Vulkan0 \
-  --split-mode none -ngl 999 -c 32768 -np 1 \
+  --split-mode none -ngl 999 -c 16384 -np 1 \
+  --cache-type-k q4_0 --cache-type-v q4_0 \
+  --model-draft "$MTP" --spec-type draft-mtp --device-draft Vulkan0 --gpu-layers-draft 999 \
+  --cache-type-k-draft q4_0 --cache-type-v-draft q4_0 \
   --reasoning off --temp 0 --seed 42 --host "$HOST" --port 8083 \
   >/tmp/graphify-gpu0.log 2>&1 < /dev/null &
 
 setsid "$SERVER" -m "$MODEL" --mmproj "$MMPROJ" --device Vulkan1 \
-  --split-mode none -ngl 999 -c 32768 -np 1 \
+  --split-mode none -ngl 999 -c 16384 -np 1 \
+  --cache-type-k q4_0 --cache-type-v q4_0 \
+  --model-draft "$MTP" --spec-type draft-mtp --device-draft Vulkan1 --gpu-layers-draft 999 \
+  --cache-type-k-draft q4_0 --cache-type-v-draft q4_0 \
   --reasoning off --temp 0 --seed 42 --host "$HOST" --port 8084 \
   >/tmp/graphify-gpu1.log 2>&1 < /dev/null &
 ```
@@ -77,7 +84,7 @@ OPENAI_API_KEY=local \
 OPENAI_BASE_URL="http://${RELAY_HOST}:8085/v1" \
 OPENAI_MODEL="$MODEL" \
 graphify extract . --backend openai --model "$MODEL" \
-  --mode deep --token-budget 32768 --max-concurrency 4 \
+  --mode deep --token-budget 16000 --max-concurrency 4 \
   --api-timeout 900 --no-cluster --no-viz
 ```
 
