@@ -69,7 +69,7 @@ unrelated organizations.
   `manufacturing-details` target only when evidence specifically concerns
   technical fabrication requirements. Typed links allow documents and QA
   evidence to refer to their subjects without transferring ownership.
-- Store an explicit `schemaVersion` in each JSON snapshot. When a snapshot uses
+- Store an explicit `snapshotSchemaVersion` in each JSON snapshot. When a snapshot uses
   an unsupported schema version, archive the existing snapshot before resetting
   it. `npm run snapshot:reset` is destructive: it archives and removes the
   configured snapshot; the next startup creates and persists the canonical
