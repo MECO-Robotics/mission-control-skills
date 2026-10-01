@@ -21,12 +21,16 @@ unrelated organizations.
   records within this domain. Present Schedule data through Calendar, Timeline,
   and Agenda views; these are presentations of one scheduling domain, not
   separate pages or event owners.
+- Team navigation owns People followed by Teams. People owns roster,
+  attendance, individual availability, and individual workload. Teams manages
+  team-defined ResponsibleGroups, membership, project applicability, and
+  derived group workload/capacity. Do not create a separate workload page.
 - Robot owns the subsystem → mechanism → part structure and technical/CAD
   context. Inventory owns physical materials, stock, part definitions, and
   individual part instances. Purchasing owns vendors, quotes, approvals,
   orders, shipping, and cost. QA/Reports owns verification evidence and
-  outcomes. Risks owns unresolved risks. Team owns roster, roles, availability,
-  workload, and attendance. Documents owns artifacts and evidence across
+  outcomes. Risks owns unresolved risks. Team owns people participation and
+  ResponsibleGroup management. Documents owns artifacts and evidence across
   projects; links do not make Documents part of Inventory.
 - Keep configuration with the domain that owns it. Avoid a generic Admin or
   Config page as a home for unrelated settings.
@@ -37,10 +41,22 @@ unrelated organizations.
 - Keep `Task` as the canonical human execution entity and label the workflow
   **Kanban**. Do not create a second human execution identity or queue for
   specialized work.
-- Treat work type and responsible group as separate dimensions. Work types are
-  project-specific. A ResponsibleGroup is the accountable team; a Workstream
+- Treat work type, responsible group, and workstream as separate dimensions.
+  Work types are project-specific. A ResponsibleGroup is an arbitrary
+  team-defined subteam or domain that may own Tasks through
+  `responsibleGroupId`; it is not a fixed department catalog. A Workstream
   retains its distinct planning/reporting meaning. Do not infer group ownership
   from a work type, member discipline, or workstream.
+- Student and student-lead cohorts such as Freshman, Sophomore, Junior, and Senior are analytics
+  dimensions, not task owners. Keep Tasks assigned through existing group and
+  individual assignment fields. Design cohort analytics so future non-ownership
+  tags can be added without turning cohorts into ResponsibleGroups.
+- Workload and capacity totals are derived from canonical Member,
+  ResponsibleGroup, attendance/capacity, and Task data; never persist duplicate
+  aggregates or create another workload/assignment store. Derive group members,
+  planned weekly capacity, open/blocked/overdue work, estimated hours remaining,
+  member assignments, and workload/capacity distribution. Cohort metrics may
+  summarize student count, active/open Tasks, estimated work, and logged hours.
 - Robot Kanban work types are Design, Manufacturing, Assembly,
   Electrical/Wiring, Programming, Testing, Driving, and Planning. Robot
   technical/build Planning is valid Robot work; Strategy owns game and scouting
