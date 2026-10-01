@@ -18,7 +18,9 @@ unrelated organizations.
   human execution workflow across projects.
 - Use Schedule for meetings, events, competitions, practices, deadlines,
   milestones, and reviews. Meeting, Event, and Milestone may remain distinct
-  records within this domain.
+  records within this domain. Present Schedule data through Calendar, Timeline,
+  and Agenda views; these are presentations of one scheduling domain, not
+  separate pages or event owners.
 - Robot owns the subsystem → mechanism → part structure and technical/CAD
   context. Inventory owns physical materials, stock, part definitions, and
   individual part instances. Purchasing owns vendors, quotes, approvals,
@@ -49,10 +51,13 @@ unrelated organizations.
   CNC, 3D Print, or Fabrication) separate from fulfillment source (In-house or
   Outsourced). COTS acquisition uses Purchasing without ManufacturingDetails;
   custom outsourced manufacturing keeps its technical details and links to
-  Purchasing.
+  Purchasing. Model `ManufacturingProcess` as a data-driven, extensible catalog,
+  not a closed enum; CNC, 3D Print, and Fabrication are initial process entries.
 - Purchasing records own commercial state. The associated Task represents the
   human procurement work in Kanban; do not turn PurchaseItem into a second work
-  card or status owner.
+  card or status owner. Store the link as `PurchaseItem.taskId`, pointing from
+  PurchaseItem to Task. Keep `PurchaseItem.taskId` as the only persisted link;
+  do not add a Task-side `purchaseItemId`.
 - Keep Material location for raw/bulk stock. A PartInstance represents one
   physical finished part and owns its physical location/state. Derived Robot
   readiness is separate from physical location: an installed part is not
@@ -64,9 +69,13 @@ unrelated organizations.
   `manufacturing-details` target only when evidence specifically concerns
   technical fabrication requirements. Typed links allow documents and QA
   evidence to refer to their subjects without transferring ownership.
-- On an incompatible prototype JSON snapshot, preserve it in an archive and
-  start from the canonical six-project seed. Do not build broad record-by-record
-  migration or compatibility fields/adapters to retain prototype state.
+- Store an explicit `snapshotSchemaVersion` in each JSON snapshot. When a snapshot uses
+  an unsupported schema version, archive the existing snapshot before resetting
+  it. `npm run snapshot:reset` is destructive: it archives and removes the
+  configured snapshot; the next startup creates and persists the canonical
+  six-project seed. Data in the discarded snapshot is not migrated or restored.
+  Do not build broad record-by-record migrations or compatibility
+  fields/adapters for disposable prototype state.
 - Create mechanisms, subsystems, and project structure according to the
   authorized product workflow.
 - Distinguish intended iteration history from disposable fixture state; preserve history only where the product claims it.
