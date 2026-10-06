@@ -18,6 +18,25 @@ When changing an app-facing skill, inspect its affected app consumers and verify
 
 Every AI-assisted change must use the Moyu skill and record a `Moyu-Skill:` commit trailer. Local commits run Aislop through `npx --yes aislop@latest ci`, and every pull request is gated by the same check; do not claim validation passed without its result.
 
+## Fast task discovery and validation
+
+In the Mission Control workspace, read the required web contributor guide first.
+Query the existing Graphify graph for the task, then read only the selected active
+cleanup row and relevant source/tests. Use raw searches when scoped graph results
+are insufficient. Delivery history is evidence to rebaseline, not startup context.
+
+Use focused tests during edits, then the affected app's full verification once
+before handoff. Reuse results only while source, configuration, dependencies and
+relevant environment inputs remain unchanged. Contract changes must include all
+affected clients. Each app's CONTRIBUTING file owns its exact commands.
+
+Keep worktrees and isolated dependencies under the HDD-backed
+`mission-control-worktrees/`; put npm downloads and diagnostics under
+`mission-control-cache/`. Do not share mutable node_modules between worktrees.
+Record cold/warm setup and validation timings with revision and environment;
+change concurrency or caches only when measurements justify it. Optional model,
+retrieval and worker services are not prerequisites for ordinary contributions.
+
 ## Branches and review
 
 - Keep base checkouts read-only apart from fetches and worktree creation. Implement in a dedicated `feature/*` or `fix/*` worktree based on current `origin/development`.
