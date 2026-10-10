@@ -11,3 +11,9 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the shared contributor workflow an
 - Delegate only when authorized, with disjoint write scopes; integrate and verify centrally.
 - Preserve unrelated work. Report actual validation, unrun checks and remaining blockers without substituting automated comments for required approvals.
 - Before making any code or configuration modification, invoke the Moyu skill and apply its scope checklist. This is mandatory for every LLM-assisted modification, regardless of size.
+
+<!-- antislop:start -->
+## Antislop
+
+For interface or copy work, read `skills/antislop/SKILL.md`. Only the core filter is installed. Resolve its usage mode from an explicit session choice, then the saved global preference, then ask as the core directs. Installing this skill does not choose a usage mode.
+<!-- antislop:end -->
