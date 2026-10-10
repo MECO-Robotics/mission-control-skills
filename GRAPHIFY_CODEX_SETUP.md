@@ -130,50 +130,29 @@ graphify god-nodes --top 20
 graphify query "<audit question>"
 ```
 
-## Git operations for Graphify artifacts
+## Keep generated Graphify output local
 
-Keep Graphify changes in a dedicated worktree and feature branch. Do not edit the base checkout:
+Ignore the entire `/graphify-out/` directory. Graphs, manifests, reports, compressed
+exports and caches are generated context, not repository source. Regenerate them
+locally with the extraction commands above; do not force-add them to Git or
+compress them merely to publish them in the repository.
+
+Check the rule and tracked files:
 
 ```bash
-git fetch origin development
-git worktree add -b feature/graphify-update ../graphify-update origin/development
-cd ../graphify-update
+git check-ignore --no-index graphify-out/graph.json
+git ls-files graphify-out/
 ```
 
-After extraction, commit the shareable artifacts together:
+The second command should print nothing. If a repository already tracks generated
+output, remove it from the index while retaining local files:
 
 ```bash
-git add GRAPHIFY_CODEX_SETUP.md graphify-out/graph.json \
-  graphify-out/manifest.json graphify-out/.graphify_labels.json \
-  graphify-out/.graphify_analysis.json graphify-out/GRAPH_REPORT.md
+git rm --cached -r graphify-out/
+git add .gitignore
 git diff --cached --check
-git commit -m "docs: update Graphify artifacts"
 ```
 
-Before committing, remove host-specific details. Source paths in `graph.json` should be relative to the project root. Do not commit API keys, model paths, IP addresses, relay logs, semantic caches, backups, HTML exports, or temporary sidecars.
-
-GitHub rejects files over 100 MB. If `graph.json` exceeds that limit and Git LFS is unavailable, compress it and include a short README:
-
-```bash
-gzip -c graphify-out/graph.json > graphify-out/graph.json.gz
-rm graphify-out/graph.json
-printf '%s\n' 'Decompress graph.json.gz before running graphify query.' > graphify-out/README.md
-```
-
-Push the feature branch, then merge it into `development` through the repository's normal review flow:
-
-```bash
-git push -u origin feature/graphify-update
-git fetch origin development
-git switch development
-git merge --no-ff feature/graphify-update
-git push origin development
-```
-
-Verify the remote branch and artifact paths after pushing:
-
-```bash
-git fetch origin development
-git rev-parse origin/development
-git status --short
-```
+Commit ignore rules and documentation through the normal review flow. Removing
+files from the index does not remove them from earlier commits; an oversized
+historical blob can still block pushing an old branch.
