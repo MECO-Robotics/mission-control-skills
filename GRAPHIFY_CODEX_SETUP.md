@@ -116,3 +116,17 @@ graphify diagnose multigraph
 graphify god-nodes --top 20
 graphify query "<audit question>"
 ```
+
+## Generated output stays local
+
+The entire `/graphify-out/` directory is ignored. Regenerate graphs, manifests,
+reports, compressed exports and caches locally rather than committing them.
+
+```bash
+git check-ignore --no-index graphify-out/graph.json
+git ls-files graphify-out/
+```
+
+The second command should print nothing. Earlier unpublished extraction commits
+on this branch were rewritten to remove generated output, including the oversized
+graph blob rejected by GitHub.
