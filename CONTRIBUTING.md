@@ -28,6 +28,20 @@ Every AI-assisted change must use the Moyu skill and record a `Moyu-Skill:` comm
 - Preserve required checks, independent approving reviews and branch protections. Automated review comments or reactions do not satisfy an approving-review requirement. Use only a merge method permitted by the target branch.
 - Create release tags only when a release is requested, from reviewed main. Use SemVer for the released contract.
 
+## Worktree closeout
+
+- Before retiring a worktree, inspect its staged and unstaged changes and
+  untracked files. Commit coherent work that should remain recoverable; discard
+  generated output only after confirming it is not source. Give every topic
+  branch a clear disposition: promote it through the normal review flow, retain
+  it on a named recovery branch, or intentionally drop it.
+- After an accepted change reaches its target branch, fast-forward the matching default checkout with `git pull --ff-only`.
+- Remove completed linked worktrees with `git worktree remove <path>`, then run
+  `git worktree prune` to clear stale administrative records. Pruning does not
+  remove unregistered directories; inspect their Git metadata and contents
+  before cleaning them up. Keep build caches outside
+  `mission-control-worktrees/`.
+
 ## Design and change evidence
 
 Prefer one clear owner, one authoritative representation and explicit dependencies. Delete obsolete paths and forwarding layers. Split code where ownership or reuse warrants it; physical file, import and directory counts are not acceptance gates.
